@@ -1,0 +1,17 @@
+# Byte‐compiled / caches
+__pycache__/
+*.py[cod]
+
+# Environments
+.env/
+venv/
+*.egg-info/
+
+# Data outputs
+*.h5
+*.png
+*.csv
+
+# Mac filesystem metadata
+.DS_Store
+

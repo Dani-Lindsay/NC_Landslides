@@ -1,0 +1,8 @@
+# NC_Landslides Scripts
+
+This repo contains:
+
+- **NC_Landslides_paths.py** — common paths and config  
+- **run_01_common_ls_inventory.py** — polygon‐metrics and inventory building  
+- **run_02_extract_landslide_timeseries.py** — per‐landslide ROI, stats, TS extraction  
+
