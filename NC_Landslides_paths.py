@@ -9,51 +9,52 @@ Created on Wed Jun 11 11:13:55 2025
 import glob
 import os
 
-fig_dir = "/Volumes/Seagate/NC_Landslides/Figures"
+fig_dir = "/Volumes/Seagate/NC_Landslides/Figures/July24"
 data_dir = "/Volumes/Seagate/NC_Landslides/Data"
-ts_dir = "/Volumes/Seagate/NC_Landslides/Timeseries_2"
+ts_dir = "/Volumes/Seagate/NC_Landslides/Timeseries"
 ls_input_dir = os.path.join(data_dir, "NorCal_Slides")
+ts_out_dir = os.path.join(data_dir, "LS_Timeseries_2")
 
 # ------------------------
 # Common Paths
 # ------------------------
 common_paths = {
     "ls_kmls": {
-        #"Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.kml"),
-        #"Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.kml"),
-        #"Bennett_Dormant": os.path.join(ls_input_dir, "Bennettetal_2016_Dormant_earthflows.kml"),
+        "Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.kml"),
+        "Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.kml"),
+        "Bennett_Dormant": os.path.join(ls_input_dir, "Bennettetal_2016_Dormant_earthflows.kml"),
         "Handwerger_2015": os.path.join(ls_input_dir, "Handwergeretal_2015.kml"),
         "Handwerger_WY2016": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2016landslides.kml"),
         "Handwerger_WY2017": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2017landslides.kml"),
         "Handwerger_WY2018": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2018landslides.kml"),
-        #"Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.kml"),
+        "Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.kml"),
         "Xu_2021":         os.path.join(ls_input_dir, "Xu_2021_wcSlides.kml"),
         "Lindsay_Coast":         os.path.join(ls_input_dir, "Lindsay_Coast.kml"),
         "Lindsay_Inland":         os.path.join(ls_input_dir, "Lindsay_Inland.kml"),
         # add more sources here if needed…
     },
     "ls_geojson": {
-        #"Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.geojson"),
-        #"Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.geojson"),
-        #"Bennett_Dormant": os.path.join(ls_input_dir, "Bennettetal_2016_Dormant_earthflows.geojson"),
+        "Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.geojson"),
+        "Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.geojson"),
+        "Bennett_Dormant": os.path.join(ls_input_dir, "Bennettetal_2016_Dormant_earthflows.geojson"),
         "Handwerger_2015": os.path.join(ls_input_dir, "Handwergeretal_2015.geojson"),
         "Handwerger_WY2016": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2016landslides.geojson"),
         "Handwerger_WY2017": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2017landslides.geojson"),
         "Handwerger_WY2018": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2018landslides.geojson"),
-        #"Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.geojson"),
+        "Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.geojson"),
         "Xu_2021":         os.path.join(ls_input_dir, "Xu_2021_wcSlides.geojson"),
         "Lindsay_Coast":  os.path.join(ls_input_dir, "Lindsay_Coast.geojson"),
         "Lindsay_Inland": os.path.join(ls_input_dir, "Lindsay_Inland.geojson"),
     },
     "ls_gmt": {
-        #"Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.txt"),
-        #"Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.txt"),
-        #"Bennett_Dormant": os.path.join(ls_input_dir, "Bennettetal_2016_Dormant_earthflows.txt"),
+        "Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.txt"),
+        "Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.txt"),
+        "Bennett_Dormant": os.path.join(ls_input_dir, "Bennettetal_2016_Dormant_earthflows.txt"),
         "Handwerger_2015": os.path.join(ls_input_dir, "Handwergeretal_2015.txt"),
         "Handwerger_WY2016": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2016landslides.txt"),
         "Handwerger_WY2017": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2017landslides.txt"),
         "Handwerger_WY2018": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2018landslides.txt"),
-        #"Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.txt"),
+        "Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.txt"),
         "Xu_2021":         os.path.join(ls_input_dir, "Xu_2021_wcSlides.txt"),
         "Lindsay_Coast":         os.path.join(ls_input_dir, "Lindsay_Coast.txt"),
         "Lindsay_Inland":         os.path.join(ls_input_dir, "Lindsay_Inland.txt"),

@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Created on Thu Jul 24 13:39:56 2025
+
+@author: daniellelindsay
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
 Batch‐process landslide ROIs, velocity statistics, and time‐series extraction
 across all y*_box directories.
 """
@@ -15,7 +23,8 @@ import matplotlib.pyplot as plt
 import pygmt
 import pyproj
 from datetime import datetime
-from NC_Landslides_paths import common_paths
+from scipy.stats import linregress
+from NC_Landslides_paths import *
 
 # -------------------------------------------------------------------------
 # Constants & Defaults
@@ -28,9 +37,24 @@ BACKGROUND_STD_THRESHOLD = 0.02
 MIN_Q95_PIXELS           = 10           # For large landslides allow us get time series of fastest pixels
 MIN_Q75_PIXELS           = 10           # Sets the miniumum resolveable size of landslide
 DISTRIBUTION_THRESHOLD   = 100          # How scattered the pixels can be
+poly_order               = 4            # Polynomial order for calculating RMSE 
+
+dataset_label = "Timeseries_1"
 
 eq1 = 2021.9685
 eq2 = 2022.9685
+
+eq_21_lon = -124.298
+eq_21_lat = 40.390
+eq_21_m = 6.2 
+eq_22_lat = 40.525
+eq_22_lon = -124.423
+eq_22_m = 6.4
+
+vel_t1 = 2022.1667
+vel_t2 = 2022.9167
+vel_t3 = 2023.1667
+vel_t4 = 2023.9167
 
 SKIP_IDS = {} #{"wc486", "wc107", "wc340", "wc341"}
 STATS = {k:0 for k in [
@@ -96,7 +120,7 @@ def plot_median_with_iqr(ts_df, title, save_path):
 def plot_roi_map(
     box_id, ls_id, ls_row, roi_df, inside, inside_ab, ls_q75, ls_q95, ls_sign,
     ts_df,
-    radius, buffer, poly_gmt, fig_dir, cluster_label
+    radius, buffer, poly_gmt, fig_dir, cluster_label, coeffs_clean
 ):
     fig_region = "%s/%s/%s/%s" % (np.nanmin(roi_df['Lon']), np.nanmax(roi_df['Lon']),
                                   np.nanmin(roi_df['Lat']), np.nanmax(roi_df['Lat']))
@@ -195,6 +219,16 @@ def plot_roi_map(
         fig.plot(x=[row["dates"], row["dates"]], y=[row['clean_ts'] - row['err_low'], row['clean_ts'] + row['err_high']],
             pen="1p,dodgerblue4", transparency=50)
 
+    # 1) make a nice dense set of x’s between min and max date
+    x_fit = np.linspace(ts_df["dates"].min(), ts_df["dates"].max(), 200)
+    
+    # 2) evaluate the polynomial at those x’s
+    #    coeffs_clean is like [a, b, c] from np.polyfit(...)
+    y_fit = np.polyval(coeffs_clean, x_fit)
+
+    # 3) plot the line
+    fig.plot(x=x_fit, y=y_fit, pen="2p,dodgerblue4", label="2nd order fit", transparency=50)
+    
     fig.plot(x=ts_df["dates"], y=ts_df["median_ls"], style="c0.15c",
              pen="1p,darkorange", fill="darkorange", label="Original")
     
@@ -202,7 +236,7 @@ def plot_roi_map(
              pen="1p,dodgerblue4", fill="dodgerblue4", label="Cleaned")
     fig.legend()
     
-    fname = f"{fig_dir}/{ls_row['ID']}_{box_id}_radius{np.round(radius,1)}_buffer{buffer}_{cluster_label}.png"
+    fname = f"{fig_dir}/{ls_row['ID']}_{box_id}_radius{np.round(radius,1)}_buffer{buffer}_{cluster_label}_{dataset_label}.png"
     fig.savefig(fname, transparent=False, crop=True,
                 anti_alias=True, show=False)
     fig.show()
@@ -273,6 +307,128 @@ def extract_and_plot_timeseries(
     
     return ts_df, clean_df, err_low_df, err_high_df
 
+
+def extract_geometry_means(geo_file, y0, y1, x0, x1, pixels_df):
+    """
+    Read all available grids in geo_file for the window [y0:y1,x0:x1],
+    sample them at the (y_loc, x_loc) in pixels_df, and return a dict of their means.
+    """
+    want = [
+        'height','slope','aspect',
+        'incidenceAngle','azimuthAngle',
+        'latitude','longitude',
+        'slantRangeDistance','waterMask'
+    ]
+    means = {}
+    with h5py.File(geo_file, 'r') as hf:
+        # keep only those datasets actually present
+        have = [v for v in want if v in hf]
+        # load the window into memory once per dataset
+        windows = {v: hf[v][y0:y1, x0:x1] for v in have}
+
+        # for each field, sample at each pixel and compute its mean
+        for v in have:
+            vals = []
+            arr = windows[v]
+            for _, row in pixels_df.iterrows():
+                iy, ix = int(row['y_loc']), int(row['x_loc'])
+                vals.append(arr[iy, ix])
+            means[v] = np.nanmean(vals)
+
+    return means
+
+def extract_mean_coherence(coh_file, pixels_df):
+    """
+    Read the full /coherence array from coh_file and return the mean
+    coherence over the (y_loc, x_loc) pixels in pixels_df.
+    
+    Parameters
+    ----------
+    coh_file : str
+        Path to the HDF5 holding a top‑level '/coherence' dataset.
+    pixels_df : pandas.DataFrame
+        Must contain integer columns 'y_loc' and 'x_loc'.
+    
+    Returns
+    -------
+    float
+        The mean coherence (ignoring NaNs) over those pixels.
+    """
+    with h5py.File(coh_file, "r") as hf:
+        coh = hf["coherence"][:]  # shape e.g. (1707,1644)
+    # gather values at each requested pixel
+    vals = []
+    for _, row in pixels_df.iterrows():
+        y, x = int(row["y_loc"]), int(row["x_loc"])
+        vals.append(coh[y, x])
+    return float(np.nanmean(vals))
+
+def poly_rmse(dates, values, deg=4):
+    """
+    Fit a degree‐`deg` polynomial to (dates, values) and return
+    both the fit coefficients and the RMSE of the residuals.
+    
+    Parameters
+    ----------
+    dates : array‑like, shape (N,)
+        Decimal‐year times.
+    values : array‑like, shape (N,)
+        LOS velocity (m/yr) or displacement (cm), etc.
+    deg : int
+        Polynomial degree (e.g. 1 for linear trend, 2 for quadratic).
+    
+    Returns
+    -------
+    coeffs : ndarray, shape (deg+1,)
+        Polynomial coefficients (highest power first).
+    rmse : float
+        sqrt(mean((values − poly(dates))**2)), ignoring NaNs.
+    """
+    # fit
+    mask = np.isfinite(dates) & np.isfinite(values)
+    c = np.polyfit(dates[mask], values[mask], deg)
+    # evaluate
+    fit = np.polyval(c, dates)
+    resid = values - fit
+    rmse = np.sqrt(np.nanmean(resid[mask]**2))
+    return c, rmse
+
+def compute_velocity(dates, values, start, stop):
+    """
+    Fit a straight line to ‘values’ vs. ‘dates’ between start and stop,
+    automatically ignoring any NaNs, and return (velocity, σ_velocity).
+
+    Parameters
+    ----------
+    dates : array-like of float
+        Decimal-year timestamps.
+    values : array-like of float
+        Displacements (same length as dates).
+    start, stop : float
+        Decimal-year window over which to fit.
+
+    Returns
+    -------
+    slope : float
+        Best-fit rate (units of values per year).
+    stderr : float
+        Standard error of the slope.
+    """
+    # convert to arrays
+    t = np.asarray(dates, dtype=float)
+    d = np.asarray(values, dtype=float)
+
+    # mask to window and non-NaN
+    m = (t >= start) & (t <= stop) & ~np.isnan(d)
+    if m.sum() < 2:
+        raise ValueError(f"Not enough valid points in [{start}, {stop}]")
+
+    x = t[m]
+    y = d[m]
+
+    res = linregress(x, y)
+    return res.slope, res.stderr
+
 # -------------------------------------------------------------------------
 # Per‐landslide processing
 # -------------------------------------------------------------------------
@@ -290,6 +446,14 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
     # reference distance
     _,_,ref_d = calc_azi(ref_lon, ref_lat, ls_lon, ls_lat)
     ls_row['ref_dist'] = ref_d
+    
+    # eq1 distance
+    _,_,eq1_dist = calc_azi(eq_21_lon, eq_21_lat, ls_lon, ls_lat)
+    ls_row['eq_21_dist'] = eq1_dist
+    
+    # eq2 distance
+    _,_,eq2_dist = calc_azi(eq_22_lon, eq_22_lat, ls_lon, ls_lat)
+    ls_row['eq_22_dist'] = eq2_dist
 
     # raw ROI window
     r, b, x0, x1, y0, y1 = compute_roi_window(
@@ -381,56 +545,140 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
         print("   • sparse cluster; skipping")
         return
 
-    # 4) downstream: extract TS & plot using `ls_cluster` instead of ls_q75
-    ts_df, clean_df, err_low_df, err_high_df = extract_and_plot_timeseries(
-        box_id, ls_id, ls_row, ls_cluster,
-        roi_lons, roi_lats,
-        b, r,
-        ts_file, fig_dir,
-        ys, ye, xs, xe,
+    ts_df, clean_df, err_low_df, err_hi_df = extract_and_plot_timeseries(
+        box_id, ls_id, ls_row, ls_cluster, roi_lons, roi_lats,
+        b, r, ts_file, fig_dir, ys, ye, xs, xe,
         clean_df, err_low_df, err_high_df
     )
+    
+    # 4.a) compute goodness‐of‐fit metrics
+    #    here we fit a quadratic to the cleaned timeseries:
+    coeffs_clean, rmse_clean = poly_rmse(ts_df["dates"].values,
+                                         ts_df["clean_ts"].values,
+                                         deg=poly_order)
+    
+    #    optionally also on the raw median LS:
+    coeffs_orig, rmse_orig = poly_rmse(ts_df["dates"].values,
+                                       ts_df["median_ls"].values,
+                                       deg=poly_order)
+    
+    vel_dry1, err_dry1 = compute_velocity(ts_df["dates"].values, ts_df["median_ls"].values, start=vel_t1, stop=vel_t2)
+    vel_dry2, err_dry2 = compute_velocity(ts_df["dates"].values, ts_df["median_ls"].values, start=vel_t3, stop=vel_t4)
+    linear_vel, linear_err = compute_velocity(ts_df["dates"].values, ts_df["median_ls"].values, start=np.nanmin(ts_df["dates"].values), stop=np.nanmax(ts_df["dates"].values))
+    
+    # percentage of RMSE improved with cleaning    
+    pct_rmse_red = 100 * (rmse_orig - rmse_clean) / rmse_orig
 
+    # ─── grab geometry fields at those same pixels ────────────────────────────
+    # grab per‑pixel means of all geometry fields
+    geo_file = os.path.join(box, "geo", "geo_geometryRadar.h5")
+    geo_means = extract_geometry_means(geo_file, ys, ye, xs, xe, ls_cluster)
+
+    coh_file = os.path.join(box, "geo", "geo_avgSpatialCoh.h5")
+    mean_coh = extract_mean_coherence(coh_file, ls_cluster)
+    
+    # right after you have ts_df, clean_df, err_low_df, err_high_df, and meta…
+    dates_arr    = ts_df["dates"].values                 # shape (N,)
+    clean_arr    = clean_df[ls_id].values                # shape (N,)
+    err_low_arr  = err_low_df[ls_id].values              # shape (N,)
+    err_high_arr = err_high_df[ls_id].values             # shape (N,)
+    # … compute your diagnostics dict …
+    if cluster_label == "q95":
+        STATS['ts_q95'] += 1
+    else:
+        STATS['ts_q75'] += 1
+    
+    # Plot time series 
     # plot_roi_map(
     #     box_id, ls_id, ls_row, df, inside, inside_ab, ls_q75, ls_q95, ls_sign,
     #     ts_df,
-    #     r, b, poly_gmt, fig_dir, cluster_label
+    #     r, b, poly_gmt, fig_dir, cluster_label, coeffs_clean
     # )
 
-    # ---- move all STATS updates here ----
-    if cluster_label == "q95":
-        STATS['ts_q95'] += 1
-    else:  # must be q75
-        STATS['ts_q75'] += 1
-        
-    # build a metadata dict for this slide
-    meta = {
-        'ID':                ls_id,
-        'ls_sign':           ls_sign,
-        'background_std':    ls_row['background_std'],
-        'ref_dist':          ref_d,
-        'n_q75':             len(ls_q75),
-        'n_q95':             len(ls_q95),
-        'mean_nn':           mean_nn,
-        'radius':            r,
-        'buffer':            b,
-        'cluster_label':     cluster_label
-    }
-    print("   • processed")
-    
-    return meta
+    # --- write one HDF5 per‐slide ---
+    # build output filename
+    fname = f"{ls['ID']}_{box_id}_{cluster_label}_{dataset_label}.h5"
+    out_h5 = os.path.join(data_dir, fname)
+
+    # now write exactly one HDF5 per slide
+    with h5py.File(out_h5, 'w') as hf:
+        # 1) params group
+        p = hf.create_group("params")
+        for k,v in {
+            'radius_m':          r,
+            'buffer_m':          b,
+            'bg_std_thresh_my-1':     BACKGROUND_STD_THRESHOLD,
+            'min_num_q75':           MIN_Q75_PIXELS,
+            'min_num_q95':           MIN_Q95_PIXELS,
+            'nn_dist_thresh_m':       DISTRIBUTION_THRESHOLD,
+
+        }.items():
+            p.attrs[k] = v
+
+        # 2) meta group
+        m = hf.create_group("meta")
+        # include *all* slide‐level info here
+        slide_info = {
+          'ID':                  ls['ID'],
+          'Lat':                 ls['Lat'],
+          'Lon':                 ls['Lon'],
+          'ls_sign':             ls_sign,
+          'ls_area_m2':          ls['area_m2'],
+          'ls_perimeter_m':      ls['perimeter_m'],
+          'ls_compactness':      ls['compactness'],
+          'ls_max_diameter_m':   ls['max_diameter_m'],
+          'ls_min_diameter_m':   ls['min_diameter_m'],
+          'ls_axis_ratio':       ls['axis_ratio'],
+          'ls_orientation_deg':  ls['orientation_deg'],
+          'ls_mean_height':            geo_means.get('height', np.nan),
+          'ls_mean_slope':             geo_means.get('slope',  np.nan),
+          'ls_mean_aspect':            geo_means.get('aspect', np.nan),
+          'ls_mean_incidenceAngle':    geo_means.get('incidenceAngle', np.nan),
+          'ls_mean_avgSpatialCoh':    mean_coh,
+          'sources':             ls['sources'],
+          'dist_ref_m':            ls['ref_dist'],
+          'dist_eq_21_m':          ls['eq_21_dist'],
+          'dist_eq_22_m':          ls['eq_22_dist'],
+          'ts_background_std_my-1':   ls['background_std'],
+          'ts_mean_nn_dist_m':          mean_nn,
+          'ts_num_q75':            len(ls_q75),
+          'ts_num_q95':            len(ls_q95),
+          'ts_data_label':    cluster_label,
+          'ts_rmse_clean_m':    rmse_clean,   # if clean_ts is in m/yr, multiply
+          'ts_rmse_orig_m':     rmse_orig,
+          'ts_poly_deg':         poly_order,
+          'ts_poly_coeffs_clean': coeffs_clean.tolist(),
+          'ts_poly_coeffs_orig':  coeffs_orig.tolist(),
+          'ts_pct_rmse_red':        pct_rmse_red, 
+          'ts_linear_vel_myr':      linear_vel,
+          'ts_linear_err_myr':      linear_err,
+          'ts_dry1_vel_myr':        vel_dry1,
+          'ts_dry1_err_myr':        err_dry1,
+          'ts_dry2_vel_myr':        vel_dry2,
+          'ts_dry2_err_myr':        err_dry2,
+        }
+        for k,v in slide_info.items():
+            m.attrs[k] = v
+            
+        # 3) time‐series at root
+        hf.create_dataset("dates",     data=dates_arr,    dtype='f8')
+        hf.create_dataset("clean_ts",  data=clean_arr,    dtype='f8')
+        hf.create_dataset("err_low",   data=err_low_arr,  dtype='f8')
+        hf.create_dataset("err_high",  data=err_high_arr, dtype='f8')
+
+    print(f"✔  wrote {out_h5}")
 
 # -------------------------------------------------------------------------
 # Main
 # -------------------------------------------------------------------------
 if __name__=="__main__":
-    root     = "/Volumes/Seagate/NC_Landslides/Timeseries_2"
+    root     = ts_dir
     poly_csv = common_paths['ls_inventory']
-    poly_gmt = "/Volumes/Seagate/NC_Landslides/Data/wcSlides_polygons.gmt"
-    fig_dir  = "/Volumes/Seagate/NC_Landslides/Figures/July23"
-    data_dir = "/Volumes/Seagate/NC_Landslides/Data"
+    poly_gmt = common_paths['ls_gmt']['Xu_2021']
+    fig_dir  = fig_dir
+    data_dir = ts_out_dir
     os.makedirs(fig_dir, exist_ok=True)
-    os.makedirs(data_dir, exist_ok=True)
+    os.makedirs(ts_out_dir, exist_ok=True)
 
     # load landslide metrics
     slides = pd.read_csv(poly_csv, dtype={'ls_id':str})
@@ -479,42 +727,13 @@ if __name__=="__main__":
         meta_data = []
         
         for _, ls in subset.iterrows():
-            meta = process_landslide(
+            process_landslide(
                 ls, vel_lons, vel_lats, lon_1d, lat_1d,
                 ncols, nrows, ref_lon, ref_lat,
                 vel_file, ts_file, fig_dir,
                 clean_df, err_low_df, err_hi_df,
                 box_id
             )
-            if meta is not None:
-                meta_data.append(meta)
-
-        meta_df = pd.DataFrame(meta_data)
-        
-        # write cleaned TS HDF5
-        out_h5 = os.path.join(data_dir, f"{box_id}_cleaned_timeseries.h5")
-        with h5py.File(out_h5,'w') as hf:
-            hf.attrs.update({
-                'radius_m': DEFAULT_RADIUS_M,
-                'buffer_m': BUFFER_M,
-                'bg_std_thresh': BACKGROUND_STD_THRESHOLD,
-                'min_q95': MIN_Q95_PIXELS,
-                'min_q75': MIN_Q75_PIXELS,
-                'dist_thresh': DISTRIBUTION_THRESHOLD   
-            })
-            hf.create_dataset("dates",     data=np.array(dates_fixed,dtype='f8'))
-            hf.create_dataset("ls_id",     data=np.array(subset['ID'],    dtype='S'))
-            hf.create_dataset("clean_ts",  data=clean_df.values,           dtype='f8')
-            hf.create_dataset("err_low",   data=err_low_df.values,         dtype='f8')
-            hf.create_dataset("err_high",  data=err_hi_df.values,          dtype='f8')
-            
-            for col in meta_df.columns:
-                    vals = meta_df[col].values
-                    if np.issubdtype(vals.dtype, np.number):
-                        hf.create_dataset(col, data=vals.astype('f8'))
-                    else:
-                        hf.create_dataset(col, data=vals.astype('S'))
-            print(f"  • wrote TS HDF5 → {out_h5}")
 
     # Summary pie chart
     labels = ['Manual skip','No data','High bg std','Too few pxl','Sparse','TS q75', 'TS q95']
