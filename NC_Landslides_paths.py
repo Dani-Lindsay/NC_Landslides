@@ -9,8 +9,9 @@ Created on Wed Jun 11 11:13:55 2025
 import glob
 import os
 
-fig_dir = "/Volumes/Seagate/NC_Landslides/Figures/July24"
+fig_dir = "/Volumes/Seagate/NC_Landslides/Figures"
 data_dir = "/Volumes/Seagate/NC_Landslides/Data"
+inputs_dir = "/Volumes/Seagate/NC_Landslides/Inputs"
 ts_dir = "/Volumes/Seagate/NC_Landslides/Timeseries"
 ls_input_dir = os.path.join(data_dir, "NorCal_Slides")
 ts_out_dir = os.path.join(data_dir, "LS_Timeseries_2")
@@ -19,6 +20,11 @@ ts_out_dir = os.path.join(data_dir, "LS_Timeseries_2")
 # Common Paths
 # ------------------------
 common_paths = {
+    "fault_files": glob.glob(os.path.join(inputs_dir, "qfaults", "*.txt")),
+    "pb_file":  os.path.join(inputs_dir, "transform.gmt"),
+    "pb2_file": os.path.join(inputs_dir, "trench.gmt"),
+    "pb3_file": os.path.join(inputs_dir, "ridge.gmt"),
+    "170_2800_frame": os.path.join(inputs_dir, "Frame_170_2800.txt"),
     "ls_kmls": {
         "Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.kml"),
         "Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.kml"),
