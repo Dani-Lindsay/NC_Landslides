@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import os, glob, shutil
 import h5py, numpy as np, pandas as pd, matplotlib.pyplot as plt
+from NC_Landslides_paths import common_paths
 
 # ─── USER CONFIG ────────────────────────────────────────────────────────────
-SRC_DIR   = "/Volumes/Seagate/NC_Landslides/Data/LS_Timeseries_2"
-DEST_DIR  = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_2"
-INV_STATS = "/Volumes/Seagate/NC_Landslides/Data/landslide_inventory_stats.csv"
+SRC_DIR   = "/Volumes/Seagate/NC_Landslides/Data/LS_Timeseries_4"
+DEST_DIR  = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4"
+INV_STATS = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/landslide_inventory_stats.csv"
 os.makedirs(DEST_DIR, exist_ok=True)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -46,18 +47,35 @@ if bad:
     print(f"Dropping {len(bad)} slides w/ mixed signs:", bad)
 df = df[~df["ls_id"].isin(bad)]
 
-# 4) pick the best (min ts_rmse_clean_m) per ls_id
+# # 4) pick the best (min ts_rmse_clean_m) per ls_id
+# best = (
+#     df
+#     .sort_values("ts_rmse_clean_m", ascending=True)
+#     .groupby("ls_id", as_index=False)
+#     .first()    # retains *all* meta columns + 'file'
+# )
+# selected_ids = set(best["ls_id"])
+# print("Final ls_id selected:", sorted(selected_ids))
+# 4) pick the best per ls_id: RMSE primary, NN secondary within a 0.2 m RMSE window
+df['rmse_min'] = df.groupby('ls_id')['ts_rmse_clean_m'].transform('min')
+
+# candidate pool = those within 0.2 m of the best RMSE
+candidates = df[df['ts_rmse_clean_m'] <= df['rmse_min'] + 0.1]
+
+# for each ls_id, pick the one with the lowest mean‐NN
 best = (
-    df
-    .sort_values("ts_rmse_clean_m", ascending=True)
-    .groupby("ls_id", as_index=False)
-    .first()    # retains *all* meta columns + 'file'
+    candidates
+    .loc[candidates.groupby('ls_id')['ts_mean_nn_dist_m']
+         .idxmin()]
+    .reset_index(drop=True)
 )
+
 selected_ids = set(best["ls_id"])
 print("Final ls_id selected:", sorted(selected_ids))
 
+
 # 5) read your inventory‐stats CSV & merge in all best‐meta columns
-inv = pd.read_csv(INV_STATS, dtype={"ls_id":str})
+inv = pd.read_csv(common_paths['ls_inventory'], dtype={"ls_id":str})
 inv = inv.merge(
     best.drop(columns=["file"]), 
     on="ls_id", how="left"
@@ -95,7 +113,7 @@ for ls, grp in df.groupby("ls_id"):
         bf = best[best.ls_id==ls].iloc[0]
         with h5py.File(bf["file"], "r") as hf:
             d = hf["dates"][:] ; ts = hf["clean_ts"][:]
-        plt.plot(d, ts - np.nanmean(ts), "k-", lw=3, label="BEST")
+        plt.plot(d, ts - np.nanmean(ts), "k-", lw=2, label="BEST")
         plt.title(f"Slide {ls}")
         plt.legend(fontsize="small")
         png = os.path.join(DEST_DIR, f"{ls}_comparison.png")

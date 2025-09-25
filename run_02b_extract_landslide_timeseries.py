@@ -34,16 +34,18 @@ from NC_Landslides_paths import *
 DEFAULT_RADIUS_M         = 700
 BUFFER_M                 = 4000
 ROI_FACTOR               = 2.0
-BACKGROUND_STD_THRESHOLD = 0.01        # Standard deviation of the background must be smaller than 1.5 cm/yr
-MIN_Q95_PIXELS           = 15           # For large landslides allow us get time series of fastest pixels
+INSIDE_STD_FACTOR        = 2            # How many mutiples of std to exclude within the radius. i.e. what is above background noise
+BACKGROUND_STD_THRESHOLD = 0.02         # Standard deviation of the background must be smaller than 1.5 cm/yr
+MIN_Q95_PIXELS           = 10           # For large landslides allow us get time series of fastest pixels
 MIN_Q75_PIXELS           = 10           # Sets the miniumum resolveable size of landslide
-DIST_RADIUS_gt_default   = 200          # How scattered the pixels can be
-DIST_RADIUS_eq_default   = 150
-SLOPE_THESHOLD           = 5            # Minimum slope threhold. 
+SLOPE_THESHOLD           = 3            # Minimum slope threhold. 
 poly_order               = 4            # Polynomial order for calculating RMSE 
 nn_scaled_threshold      = 3  
+EDGE_THRESHOLD           = 0.8          # Fraction of valid data in radius at edge of the frame. 
 
-dataset_label = "Timeseries_2"
+dataset_label = "Timeseries_1"
+
+GEOD = pyproj.Geod(ellps='WGS84')
 
 eq1 = 2021.9685
 eq2 = 2022.9685
@@ -60,15 +62,7 @@ vel_t2 = 2022.9167
 vel_t3 = 2023.1667
 vel_t4 = 2023.9167
 
-SKIP_IDS = {} #{"wc486", "wc107", "wc340", "wc341"}
-STATS = {k:0 for k in [
-    'manual_skip','no_valid_data','high_background_std',
-    'few_q75_pixels','high_nn_distance', 'low_slope','ts_q75', 'ts_q95', 'high_nn_scaled'
-]}
-
-
-
-GEOD = pyproj.Geod(ellps='WGS84')
+SKIP_IDS = {}
 
 # -------------------------------------------------------------------------
 # Helper Functions
@@ -122,23 +116,6 @@ def compute_roi_window(lon, lat, lon_1d, lat_1d, ncols, nrows, max_diam):
     y0 = max(find_nearest_idx(lat_1d, lat-dlat), 0)
     y1 = min(find_nearest_idx(lat_1d, lat+dlat)+1, nrows)
     return radius, buffer_m, half_ext, x0, x1, y0, y1
-
-# -------------------------------------------------------------------------
-# Plotting
-# -------------------------------------------------------------------------
-# def plot_median_with_iqr(ts_df, title, save_path):
-#     fig, ax = plt.subplots(figsize=(8,5))
-#     med, q1, q3 = ts_df['median_ls'], ts_df['q1_ls'], ts_df['q3_ls']
-#     ax.errorbar(ts_df.index, med, yerr=[med-q1,q3-med], fmt='o',
-#                 ecolor='gray', capsize=2, label='Original')
-#     clean, el, eh = ts_df['clean_ts'], ts_df['err_low'], ts_df['err_high']
-#     ax.errorbar(ts_df.index, clean, yerr=[el,eh], fmt='s',
-#                 ecolor='black', capsize=2, label='Cleaned')
-#     ax.set(title=title, xlabel="Decimal Year", ylabel="Velocity (m/yr)")
-#     ax.grid('--', alpha=0.5); ax.legend(); fig.tight_layout()
-#     fig.savefig(save_path, dpi=300, bbox_inches='tight')
-#     plt.close(fig)
-    
 
 def plot_roi_map(
     box_id, ls_id, ls_row, roi_df, inside, inside_ab, ls_q75, ls_q95, ls_sign,
@@ -576,37 +553,36 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
                       vel_file, ts_file, fig_dir,
                       clean_df, err_low_df, err_high_df,
                       box_id):
+    
+    ls_row['insar_dataset'] = dataset_label
+    ls_row['insar_box_id'] = box_id
+    
     # Assign location lat and lon values
     ls_id, ls_lon, ls_lat = ls_row['ID'], ls_row['Lon'], ls_row['Lat']
     print(f"\n→ {ls_id}")
     
-    # Check landslide is not in a manual skip list
-    if ls_id in SKIP_IDS:
-        STATS['manual_skip'] += 1; print("   • skipped"); return
-
-    # reference distance
-    _,_,ref_d = calc_azi(ref_lon, ref_lat, ls_lon, ls_lat)
-    ls_row['ref_dist'] = ref_d
     
-    # eq1 distance
+    # 1) Calculate distances
+    _,_,ref_d = calc_azi(ref_lon, ref_lat, ls_lon, ls_lat)
     eq1_azi2ls,_,eq1_dist = calc_azi(eq_21_lon, eq_21_lat, ls_lon, ls_lat)
+    eq2_azi2ls,_,eq2_dist = calc_azi(eq_22_lon, eq_22_lat, ls_lon, ls_lat)
+    ls_row['ref_dist'] = ref_d
     ls_row['eq_21_dist'] = eq1_dist
     ls_row['eq_21_azi2ls'] = eq1_azi2ls
-    
-    # eq2 distance
-    eq2_azi2ls,_,eq2_dist = calc_azi(eq_22_lon, eq_22_lat, ls_lon, ls_lat)
     ls_row['eq_22_dist'] = eq2_dist
     ls_row['eq_22_azi2ls'] = eq2_azi2ls
-
+    # ------------------------------
+    # Get ROI
+    # ------------------------------
+    
     # raw ROI window, calculate raidus based on the _maximum diameter of the landslide. 
     r, b, half_ext, x0, x1, y0, y1 = compute_roi_window(
         ls_lon, ls_lat, lon_1d, lat_1d, ncols, nrows,
         ls_row['ls_max_diameter_m']
     )
     
-    # Not sure what this line does? Find index of south and east limits? 
+    # Set up ROI window
     xs, xe = sorted((x0,x1)); ys, ye = sorted((y0,y1))
-    print(f"   • r={r:.0f} buf={b:.0f} x[{xs}:{xe}] y[{ys}:{ye}]")
 
     # read velocity block from hdf5
     roi_lons = vel_lons[ys:ye, xs:xe]
@@ -632,171 +608,172 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
         'distance': d
     })
     
-
-    # Checking for edge effect, calculated expecte number of pixels within the given radius and then fraction of valid data
-    geod = Geod(ellps="WGS84")
-    _,_,dx = geod.inv(ls_lon, ls_lat, ls_lon + x_step, ls_lat)
-    _,_,dy = geod.inv(ls_lon, ls_lat, ls_lon, ls_lat + y_step)
-    pixel_area = abs(dx * dy)  # m² per pixel
-
-    # 2) compute expected count in a full circle
-    circle_area = math.pi * (r**2)  # m²
-    expected_n = circle_area / pixel_area
-
-    # 3) now your existing counts
-    mask   = df['distance'] < r
-    n_tot  = mask.sum()
-
-    # 5) reject if any of:
-    #    • zero pixels
-    #    • truncated circle (we only see <80% of expected pixels)
-    #    • too few valid (<75%)
-    #    • too few total (<MIN_Q75_PIXELS)
-    if (
-        n_tot == 0
-        or (n_tot / expected_n) < 0.80
-    ):
-        STATS['no_valid_data'] += 1
-        print(f"   • reject: {n_tot}/{expected_n} valid, "
-              f"{n_tot/expected_n:.2f} of circle")
-        return
+    # mask
+    m = (df['distance']<r)&df['Vel'].notna()
+    if not m.any():
+        ls_row['reject_reason'] = "no_valid_data"
+        print("   • reject: no valid data")
+        return ls_row
     
-    ###############3 Debugging chunk
-
+    # ------------------------------
+    # Calculate background Std
+    # ------------------------------
+    
     # Calcualte background stats. reject if background noise is too high
     bg = df[df['distance']>b]
-    med, std = np.nanmedian(bg['Vel']), np.nanstd(bg['Vel'])
-    ls_row['background_median']=med; ls_row['background_std']=std
-    if std>BACKGROUND_STD_THRESHOLD:
-        STATS['high_background_std']+=1; print("   • high bg std"); 
-        return
+    bg_med, bg_std = np.nanmedian(bg['Vel']), np.nanstd(bg['Vel'])
+    ls_row['ts_background_std'] = bg_std
+    ls_row['ts_background_median'] = bg_med
+    
+    # ------------------------------
+    # Set landslide sign, q75 and q95 values. 
+    # ------------------------------
         
-    # Q75 cluster: Get all data within the radius value. 
+    # Get all data within the radius value. 
     inside = df[df['distance']<r]
         
     # Keep only pixels above background std * 2
     inside_ab = inside[
-        (inside['Vel'] > med + 2 * std) |
-        (inside['Vel'] < med - 2 * std)
+        (inside['Vel'] > bg_med + INSIDE_STD_FACTOR * bg_std) |
+        (inside['Vel'] < bg_med - INSIDE_STD_FACTOR * bg_std)
     ]
+        
+    # 1) compute pixels at 75% & 95%. Landslide sign is whether it is postive and negative
+    ls_sign = np.sign(np.nanmedian(inside_ab['Vel'] - bg_med))
+    ls_row['ls_sign'] = ls_sign
     
-    # 1) compute deviant pixels at 75% & 95%. Landslide sign is whether it is postive and negative
-    ls_sign = np.sign(np.nanmedian(inside_ab['Vel'] - med))
-    dev = (inside_ab['Vel'] - med) * ls_sign
+    # Make absolute to calculate the quartiles. 
+    ls_absolute = (inside_ab['Vel'] - bg_med) * ls_sign
 
     # Set q75 velocity threshold
-    q75_value = np.nanquantile(dev, 0.75)
-    ls_q75 = inside_ab[dev > q75_value]
-
-    # Set q96 velocity threshold
-    q95_value = np.nanquantile(dev, 0.95)
-    ls_q95 = inside_ab[dev > q95_value]
-
+    q75_value = np.nanquantile(ls_absolute, 0.75)
+    ls_q75 = inside_ab[ls_absolute > q75_value]
+    ls_row['ts_num_q75'] = len(ls_q75)
+    
+    # Set q95 velocity threshold
+    q95_value = np.nanquantile(ls_absolute, 0.95)
+    ls_q95 = inside_ab[ls_absolute > q95_value]
+    ls_row['ts_num_q95'] = len(ls_q95)
+    
     # Decide which cluster to use based on the number of pixels. Reject if not enough q75 pixels
     if len(ls_q95) >= MIN_Q95_PIXELS:
         ls_cluster   = ls_q95
         cluster_label = "q95"
         print(f"   • using Q95 cluster ({len(ls_q95)} pixels)")
     else:
-        if len(ls_q75) < MIN_Q75_PIXELS:
-            STATS['few_q75_pixels'] += 1
-            print("   • too few Q75 pixels; skipping")
-            return
         ls_cluster    = ls_q75
         cluster_label = "q75"     
         print(f"   • using Q75 cluster ({len(ls_q75)} pixels)")
+    
+    if len(ls_q75) == 0:
+        ls_row['reject_reason'] = "no_q75_pixels"
+        print(f"   • reject: no Q75 pixels (0); skipping")
+        return ls_row
+    
+    # ------------------------------
+    # Calculate Statistics
+    # ------------------------------
+    try:        
+        # Calculate geometry metrics
+        geo_file = os.path.join(box, "geo", "geo_geometryRadar.h5")
+        geo_means = extract_geometry_means(geo_file, ys, ye, xs, xe, ls_cluster)
+        mean_slope = geo_means.get('slope',  np.nan)
+        ls_row['ls_mean_height'] = geo_means.get('height', np.nan),
+        ls_row['ls_mean_slope'] = geo_means.get('slope', np.nan),
+        ls_row['ls_mean_aspect'] = geo_means.get('aspect', np.nan),
+        ls_row['ls_mean_incidenceAngle'] = geo_means.get('incidenceAngle', np.nan)
         
-    if cluster_label == "q95":
-        mean_nn, scaled_nn = check_cluster(ls_q95, "q95", x_step, y_step)
-        # if it’s too sparse, fall back to Q75
-        if scaled_nn > nn_scaled_threshold:
-            print("   • Q95 cluster failed NN test; falling back to Q75")
-            cluster_label = "q75"
-            ls_cluster = ls_q75
+        cluster_lat = np.mean(ls_cluster[['Lat']].values)
+        cluster_lon = np.mean(ls_cluster[['Lon']].values)
+        cluster_area_m2 = total_area_m2_numPixels(x_step, y_step, len(ls_cluster), cluster_lon, cluster_lat)
+        ls_row['ts_cluster_lat'] = cluster_lat
+        ls_row['ts_cluster_lon'] = cluster_lon
+        ls_row['ts_cluster_area_m2'] = cluster_area_m2
+    
+        # Checking for edge effect, calculated expecte number of pixels within the given radius and then fraction of valid data
+        # Get per pixel area
+        geod = Geod(ellps="WGS84")
+        _,_,dx = geod.inv(ls_lon, ls_lat, ls_lon + x_step, ls_lat)
+        _,_,dy = geod.inv(ls_lon, ls_lat, ls_lon, ls_lat + y_step)
+        pixel_area = abs(dx * dy)  # m² per pixel
+    
+        # compute expected count in a full circle
+        circle_area = math.pi * (r**2)  # m²
+        expected_n = circle_area / pixel_area
+    
+        # now your existing counts
+        mask   = df['distance'] < r
+        n_tot  = mask.sum()
+        fraction_data = n_tot / expected_n
+            
+        # 4) Pixel clustering 
+        if cluster_label == "q95":
+            mean_nn, scaled_nn = check_cluster(ls_q95, "q95", x_step, y_step)
+            if scaled_nn > nn_scaled_threshold:
+                print("   • Q95 cluster failed NN test; falling back to Q75")
+                mean_nn, scaled_nn = check_cluster(ls_q75, "q75", x_step, y_step)
+                cluster_label = "q75"
+                ls_cluster = ls_q75
+            else: 
+                print(f"   • accepted Q95 cluster  (scaled_nn={scaled_nn:.2f})")
         else:
-            # Q95 is good: accept and exit
-            ls_row['mean_nn'] = mean_nn
-            ls_row['nn_scaled'] = scaled_nn
-            print(f"   • accepted Q95 cluster (scaled_nn={scaled_nn:.2f})")
-            return
+            # we either started as q75, or we fell back from q95
+            mean_nn, scaled_nn = check_cluster(ls_q75, "q75", x_step, y_step)
+        
+        ls_row['ts_mean_nn'] = mean_nn
+        ls_row['ts_nn_scaled'] = scaled_nn
+                
+    except:
+        # if *any* exception is raised above, this block runs
+        print("Couldn't get stats")
+        
+    # Reject based on number of pixels.
+    if len(ls_q75) < MIN_Q75_PIXELS:
+        ls_row['reject_reason'] = "few_q75_pixels"
+        print(f"Q75 cluster ({len(ls_q75)} pixels) --> too few Q75 pixels; skipping")
+        return ls_row
+    # ------------------------------
+    # Reject based on thresholds
+    # ------------------------------
+    
+    # Reject based location at edge of InSAR frame
+    if (n_tot == 0 or fraction_data < EDGE_THRESHOLD):
+        ls_row['reject_reason'] = "edge_of_frame"
+        print(f"   • reject: {n_tot}/{expected_n} valid, {n_tot/expected_n:.2f} of circle")
+        return ls_row
 
-    # now test “q75” (either original choice or fallback)
-    if cluster_label == "q75":
-        mean_nn, scaled_nn = check_cluster(ls_q75, "q75", x_step, y_step)
-        if scaled_nn > nn_scaled_threshold:
-            STATS['high_nn_scaled'] += 1
-            print("   • Q75 cluster failed NN test; sparse cluster; skipping")
-            return
-        else:
-            ls_row['mean_nn'] = mean_nn
-            ls_row['nn_scaled'] = scaled_nn
-            print(f"   • accepted Q75 cluster (scaled_nn={scaled_nn:.2f})")
-            return
-    
-    # # now test scaled_nn, falling back if needed
-    # for candidate in (check_cluster(ls_q95, "q95", x_step, y_step), check_cluster(ls_q75, "q75", x_step, y_step)):
-    #     if candidate is None:
-    #         continue
-    #     if candidate["scaled_nn"] <= 1.5:
-    #         # if we started with q95 but now using q75, announce fallback
-    #         if initial_label == "q95" and candidate["label"] == "q75":
-    #             print("   • Q95 cluster failed NN test; falling back to Q75")
-    
-    #         ls_cluster    = candidate["cluster"]
-    #         cluster_label = candidate["label"]
-    #         ls_row['mean_nn']   = candidate["mean_nn"]
-    #         ls_row['nn_scaled'] = candidate["scaled_nn"]
-    #         print(f"   • using {cluster_label.upper()} cluster "
-    #               f"({len(ls_cluster)} px; nn_scaled={candidate['scaled_nn']:.2f})")
-    #         break
-    # else:
-    #     STATS['high_nn_scaled'] += 1
-    #     print("   • sparse cluster; skipping")
-    #     return
-    
-    # # Compute areas from number of pixels.
-    cluster_lat = np.mean(ls_cluster[['Lat']].values)
-    cluster_lon = np.mean(ls_cluster[['Lon']].values)
-    cluster_area_m2 = total_area_m2_numPixels(x_step, y_step, len(ls_cluster), cluster_lon, cluster_lat)
+    # Reject based on standard deviation.
+    if bg_std > BACKGROUND_STD_THRESHOLD:
+        ls_row['reject_reason'] = "high_background_std"
+        print(f"   • high bg std {np.round(bg_std,2)}")
+        return ls_row
 
-    # # 3) OPTION 1: nearest‐neighbor distances on chosen cluster
-    # coords = ls_cluster[['Lon','Lat']].values
-    # nn = []
-    # for i, (li, la) in enumerate(coords):
-    #     other = np.delete(coords, i, axis=0)
-    #     _, _, ds = calc_azi(li, la, other[:, 0], other[:, 1])
-    #     nn.append(ds.min())
-    # mean_nn = np.mean(nn)
-    # ls_row['mean_nn'] = mean_nn
-    
-    # # after you’ve computed mean_nn and cluster_area_m2 & ts_num_cluster:
-    # # ideal pixel spacing ~79m. 
-    # pixel_area       = cluster_area_m2 / len(ls_cluster)    # m²/pixel
-    # ideal_nn         = np.sqrt(pixel_area)                  # m
-    # scaled_nn        = mean_nn / ideal_nn                   # unitless
-    # ls_row['nn_scaled'] = scaled_nn
-    
-    # # e.g. require scaled_nn < 1.5 (50% more spread than ideal packing)
-    # if scaled_nn > 1.75:
-    #     STATS['high_nn_scaled'] += 1
-    #     print(f"   • sparse cluster: nn_scaled={scaled_nn:.2f}>1.5; skipping")
-    #     return
-    
-    # ─── grab geometry fields at those same pixels ────────────────────────────
-    # grab per‑pixel means of all geometry fields
-    geo_file = os.path.join(box, "geo", "geo_geometryRadar.h5")
-    geo_means = extract_geometry_means(geo_file, ys, ye, xs, xe, ls_cluster)
+    # Reject based on nn_scaling.
+    if scaled_nn > nn_scaled_threshold:
+        ls_row['reject_reason'] = "high_nn_scaled"
+        print(f"   • Q75 cluster failed NN test {np.round(scaled_nn,2)}")
+        return ls_row
 
-    # coh_file = os.path.join(box, "geo", "geo_avgSpatialCoh.h5")
-    # mean_coh = extract_mean_coherence(coh_file, ls_cluster)
-    
-    mean_slope = geo_means.get('slope',  np.nan)
-    
     # Reject if slope is less than slope threshold
     if mean_slope < SLOPE_THESHOLD:
-        STATS['low_slope'] += 1
+        ls_row['reject_reason'] = "low_slope"
         print(f"   • Slope {np.round(mean_slope),1} below threshold; skipping")
+        return ls_row
+
+    # Check landslide is not in a manual skip list
+    if ls_id in SKIP_IDS:
+        ls_row['reject_reason'] = "manual_skip"
+        print("   • Manual skipped")
         return
+
+    # Sucess! Time to extract the time series. 
+    ls_row['reject_reason'] = "Success"
+    ls_row['ts_cluster_label'] = cluster_label
+    ls_row['ts_num_cluster'] = len(ls_cluster)
+        
+    # ------------------------------
+    # Extract Timeseries 
+    # ------------------------------
     
     # Extract time series for the landslide
     ts_df, clean_df, err_low_df, err_hi_df = extract_and_plot_timeseries(
@@ -805,9 +782,7 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
         clean_df, err_low_df, err_high_df
     )
     
-    
     # 4.a) compute goodness‐of‐fit metrics
-    #    here we fit a quadratic to the cleaned timeseries:
     coeffs_clean, rmse_clean = poly_rmse(ts_df["dates"].values,
                                          ts_df["clean_ts"].values,
                                          deg=poly_order)
@@ -817,26 +792,35 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
                                        ts_df["median_ls"].values,
                                        deg=poly_order)
     
-    vel_dry1, err_dry1 = compute_velocity(ts_df["dates"].values, ts_df["median_ls"].values, start=vel_t1, stop=vel_t2)
-    vel_dry2, err_dry2 = compute_velocity(ts_df["dates"].values, ts_df["median_ls"].values, start=vel_t3, stop=vel_t4)
-    linear_vel, linear_err = compute_velocity(ts_df["dates"].values, ts_df["median_ls"].values, start=np.nanmin(ts_df["dates"].values), stop=np.nanmax(ts_df["dates"].values))
+    vel_dry1, err_dry1 = compute_velocity(ts_df["dates"].values, ts_df["clean_ts"].values, start=vel_t1, stop=vel_t2)
+    vel_dry2, err_dry2 = compute_velocity(ts_df["dates"].values, ts_df["clean_ts"].values, start=vel_t3, stop=vel_t4)
+    linear_vel, linear_err = compute_velocity(ts_df["dates"].values, ts_df["clean_ts"].values, start=np.nanmin(ts_df["dates"].values), stop=np.nanmax(ts_df["dates"].values))
     
     # percentage of RMSE improved with cleaning    
-    pct_rmse_red = 100 * (rmse_orig - rmse_clean) / rmse_orig
+    pct_rmse_reduced = 100 * (rmse_orig - rmse_clean) / rmse_orig
 
+    # Set parameters into ls_row for saving metadata. 
+    ls_row['ts_rmse_clean_m'] = rmse_clean,
+    ls_row['ts_rmse_orig_m'] = rmse_orig,
+    ls_row['ts_poly_deg'] = poly_order,
+    ls_row['ts_poly_coeffs_clean'] = coeffs_clean.tolist(),
+    ls_row['ts_poly_coeffs_orig'] = coeffs_orig.tolist(),
+    ls_row['ts_pct_rmse_red'] = pct_rmse_reduced,
+    ls_row['ts_linear_vel_myr'] = linear_vel,
+    ls_row['ts_linear_err_myr'] = linear_err,
+    ls_row['ts_dry1_vel_myr'] = vel_dry1,
+    ls_row['ts_dry1_err_myr'] = err_dry1,
+    ls_row['ts_dry2_vel_myr'] = vel_dry2,
+    ls_row['ts_dry2_err_myr'] = err_dry2,
     
-    
-    # right after you have ts_df, clean_df, err_low_df, err_high_df, and meta…
+    # save dataframes as array for output into hdf5
     dates_arr    = ts_df["dates"].values                 # shape (N,)
     clean_arr    = clean_df[ls_id].values                # shape (N,)
     err_low_arr  = err_low_df[ls_id].values              # shape (N,)
     err_high_arr = err_high_df[ls_id].values             # shape (N,)
-    # … compute your diagnostics dict …
-    if cluster_label == "q95":
-        STATS['ts_q95'] += 1
-    else:
-        STATS['ts_q75'] += 1
+    orginal_arr  = ts_df["median_ls"].values            # shape (N,)
     
+     
     # Plot time series 
     #plot_roi_map(
     #    box_id, ls_id, ls_row, df, inside, inside_ab, ls_q75, ls_q95, ls_sign,
@@ -858,67 +842,34 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
             'radius_used_m':            r,    # Radius to grab pixels within. 
             'buffer_m':                 b,    # Radius for background
             'half_roi_extend':          half_ext,   # half_ext = buffer_m * ROI_FACTOR
-            'roi_factor':               ROI_FACTOR,  # ROI for background, mutiple of buffer_m 
-            'threshold_bg_std_my-1':    BACKGROUND_STD_THRESHOLD,   
-            'threshold_min_num_q75':    MIN_Q75_PIXELS,
-            'threshold_min_num_q95':    MIN_Q95_PIXELS,
-#            'threhold_nn_dist_m':       nn_max,
+            'default_radius':           DEFAULT_RADIUS_M,  # Radius for the circle surrounding the landslide
+            'default_buffer':           BUFFER_M,      # Distance between inner circle and outter
+            'default_roi_factor':       ROI_FACTOR,  # ROI for background, mutiple of buffer_m 
+            'threshold_ins_std_factor': INSIDE_STD_FACTOR, # How many mutiples of std to exclude within the radius. i.e. what is above background noise
+            'threshold_bg_std':         BACKGROUND_STD_THRESHOLD,   # How many mutiples of std to exclude within the radius. i.e. what is above background noise
+            'threshold_min_num_q95':    MIN_Q95_PIXELS, # For large landslides allow us get time series of fastest pixels
+            'threshold_min_num_q75':    MIN_Q75_PIXELS, # Sets the miniumum resolveable size of landslide
+            'threhold_nn_ratio':        nn_scaled_threshold,
             'threshold_slope':          SLOPE_THESHOLD,
-
+            'threshold_edge_data':      EDGE_THRESHOLD,
+            'insar_dataset':            dataset_label,
+            'eq21_date':                eq1, 
+            'eq21_lon':                 eq_21_lon, 
+            'eq21_lat':                 eq_21_lat, 
+            'eq22_date':                eq2, 
+            'eq22_lon':                 eq_22_lon, 
+            'eq22_lat':                 eq_22_lat,
+            'dry_21_start':             vel_t1,
+            'dry_21_end':               vel_t2,
+            'dry_22_start':             vel_t3,
+            'dry_22_end':               vel_t4,
         }.items():
             p.attrs[k] = v
 
-        # 2) meta group
+        # Add all columns in ls_row as attributes under 'meta' group        
+        slide_info = ls_row.to_dict()
         m = hf.create_group("meta")
-        # include *all* slide‐level info here
-        slide_info = {
-          'ID':                  ls['ID'],
-          'Lat':                 ls['Lat'],
-          'Lon':                 ls['Lon'],
-          'ls_References':         ls['sources'],
-          'ls_sign':             ls_sign,
-          'ls_area_m2':          ls['area_m2'],
-          'ls_perimeter_m':      ls['perimeter_m'],
-          'ls_compactness':      ls['compactness'],
-          'ls_max_diameter_m':   ls['max_diameter_m'],
-          'ls_min_diameter_m':   ls['min_diameter_m'],
-          'ls_axis_ratio':       ls['axis_ratio'],
-          'ls_orientation_deg':  ls['orientation_deg'],
-          'ls_mean_height':            geo_means.get('height', np.nan),
-          'ls_mean_slope':             geo_means.get('slope',  np.nan),
-          'ls_mean_aspect':            geo_means.get('aspect', np.nan),
-          'ls_mean_incidenceAngle':    geo_means.get('incidenceAngle', np.nan),
-          #'ls_mean_avgSpatialCoh':    mean_coh,
-          'dist_ref_m':             ls['ref_dist'],
-          'eq21_dist_m':           ls['eq_21_dist'],
-          'eq22_dist_m':           ls['eq_22_dist'],
-          'eq21_azi2ls':           ls['eq_21_azi2ls'],
-          'eq22_azi2ls':           ls['eq_22_azi2ls'],
-          'ts_background_std_my-1': ls['background_std'],
-          'ts_mean_nn_dist_m':      ls_row['mean_nn'],
-          'ts_nn_scaled':           ls_row['nn_scaled'],
-          'ts_num_q75':             len(ls_q75),
-          'ts_num_q95':             len(ls_q95),
-          'ts_num_cluster':         len(ls_cluster),
-          'ts_cluster_lat':         cluster_lat,
-          'ts_cluster_lon':         cluster_lon,
-          'ts_cluster_area_m2':     cluster_area_m2,
-          'ts_data_label':          cluster_label,
-          'ts_rmse_clean_m':        rmse_clean,   # if clean_ts is in m/yr, multiply
-          'ts_rmse_orig_m':         rmse_orig,
-          'ts_poly_deg':            poly_order,
-          'ts_poly_coeffs_clean':   coeffs_clean.tolist(),
-          'ts_poly_coeffs_orig':    coeffs_orig.tolist(),
-          'ts_pct_rmse_red':        pct_rmse_red, 
-          'ts_linear_vel_myr':      linear_vel,
-          'ts_linear_err_myr':      linear_err,
-          'ts_dry1_vel_myr':        vel_dry1,
-          'ts_dry1_err_myr':        err_dry1,
-          'ts_dry2_vel_myr':        vel_dry2,
-          'ts_dry2_err_myr':        err_dry2,
-        }
-        # for k,v in slide_info.items():
-        #     m.attrs[k] = v
+        m.attrs.update(slide_info)
             
         # Now automatically pick up _orig_id columns:
         for col, val in ls.items():
@@ -938,8 +889,10 @@ def process_landslide(ls_row, vel_lons, vel_lats, lon_1d, lat_1d,
         hf.create_dataset("clean_ts",  data=clean_arr,    dtype='f8')
         hf.create_dataset("err_low",   data=err_low_arr,  dtype='f8')
         hf.create_dataset("err_high",  data=err_high_arr, dtype='f8')
+        hf.create_dataset("ori_ts",    data=orginal_arr,  dtype='f8')
 
     print(f"✔  wrote {out_h5}")
+    return ls_row
 
 # -------------------------------------------------------------------------
 # Main
@@ -960,6 +913,8 @@ if __name__=="__main__":
     #boxes = sorted(glob.glob(os.path.join(root,"y*_box")))
     boxes = sorted(glob.glob(os.path.join(root,"y*_box")))
 
+    meta_data = []
+    
     for box in boxes:
         box_id = os.path.basename(box)
         print(f"\n=== BOX {box_id} ===")
@@ -998,39 +953,23 @@ if __name__=="__main__":
         ].copy()
         print(f"  • {len(subset)} slides")
 
-        meta_data = []
+        
         
         for _, ls in subset.iterrows():
-            process_landslide(
+            rec = process_landslide(
                 ls, vel_lons, vel_lats, lon_1d, lat_1d,
                 ncols, nrows, ref_lon, ref_lat,
                 vel_file, ts_file, fig_dir,
                 clean_df, err_low_df, err_hi_df,
                 box_id
             )
+            if rec is not None:
+                meta_data.append(rec)
 
-    # Summary pie chart
-    labels = ['Manual skip','No data','High bg std','Too few pxl','Sparse','TS q75', 'TS q95']
-    sizes  = [STATS[k] for k in [
-        'manual_skip','no_valid_data','high_background_std',
-        'few_q75_pixels','high_nn_distance', 'ts_q75', 'ts_q95'
-    ]]
-    colors = ['#66c2a5','#fc8d62','#8da0cb','#e78ac3','#a6d854','#8b8b8b', '#ffd92f']
-    def ap(p): return f"{p:.1f}%" if p>=10 else ""
-    fig,ax = plt.subplots(figsize=(7,4))
-    wedges,_,_ = ax.pie(sizes, colors=colors, startangle=90,
-                        autopct=ap, pctdistance=0.6,
-                        wedgeprops=dict(edgecolor='white'))
-    ax.legend(wedges, labels, loc="center left", bbox_to_anchor=(1.05,0.5))
-    ax.axis('equal')
-    plt.title("Processing Outcomes", pad=20)
-    plt.tight_layout()
-    plt.savefig(os.path.join(fig_dir,"processing_outcomes.png"),dpi=300,bbox_inches='tight')
-    plt.show()
-    
-    # Write out STATS to a text file
-    stats_path = os.path.join(data_dir, "processing_stats.txt")
-    with open(stats_path, 'w') as sf:
-        for key, val in STATS.items():
-            sf.write(f"{key}: {val}\n")
-    print(f"Processing stats saved to {stats_path}")
+        # after all boxes are done, write the summary once:
+        df_meta   = pd.DataFrame(meta_data)
+        out_meta  = os.path.join(data_dir, f"processing_summary_{dataset_label}_{box_id}.csv")
+        df_meta.to_csv(out_meta, index=False)
+        print(f"Full processing summary (with reject reasons) saved to {out_meta}")
+
+

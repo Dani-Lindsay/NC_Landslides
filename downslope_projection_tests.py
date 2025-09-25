@@ -29,10 +29,40 @@ import landslide_utils as utils
 # -----------------------
 # Tests / Examples
 # -----------------------
-los_value = 1
-los_inc_angle_deg = 30
+los_value = -1
+los_inc_angle_deg = 32
 los_az_angle_deg = -100
 print("Test for ALOS-2 Descending:  LOS to Downslope Projection\n")
+
+
+print("# Example 1: Return projetcion into due east\n")
+slope_deg = 0
+aspect_deg = 90
+expected_return = 0.56
+print(f"Expected return: {expected_return:.2f}")
+projected_vel = utils.project_from_downslope_to_LOS(
+    los_value, los_inc_angle_deg, los_az_angle_deg, slope_deg, aspect_deg
+)
+
+print("# Example 1: Return projetcion into due north\n")
+slope_deg = 0
+aspect_deg = 0
+expected_return = -0.09
+print(f"Expected return: {expected_return:.2f}")
+projected_vel = utils.project_from_downslope_to_LOS(
+    los_value, los_inc_angle_deg, los_az_angle_deg, slope_deg, aspect_deg
+)
+
+print("# Example 1: Return projetcion into vertical\n")
+slope_deg = 90
+aspect_deg = 90
+expected_return = 0.8
+print(f"Expected return: {expected_return:.2f}")
+projected_vel = utils.project_from_downslope_to_LOS(
+    los_value, los_inc_angle_deg, los_az_angle_deg, slope_deg, aspect_deg
+)
+
+print("---------------------------------------\n")
 
 print("# Example 1: When landslide and LOS are exactly the same, very steep, moving westward\n")
 slope_deg = 60

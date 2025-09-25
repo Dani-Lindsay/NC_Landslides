@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from NC_Landslides_paths import *
 
 # — Path to your HDF5 time series files —
-DEST_DIR = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_2"
+DEST_DIR = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4"
 ts_files = glob.glob(f"{DEST_DIR}/*.h5")
 
 # — Flatten all series into a long DataFrame with date and normalized value —

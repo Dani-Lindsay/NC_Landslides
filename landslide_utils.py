@@ -51,7 +51,7 @@ def get_design_matrix(los_inc_angle_deg, los_az_angle_deg, slope_deg, aspect_deg
     los_U = np.cos(np.deg2rad(los_inc_angle_deg))
 
     # Downslope components
-    vector_E = np.cos(np.deg2rad(slope_deg)) * np.cos(np.deg2rad(slope_direction_deg))
+    vector_E = np.cos(np.deg2rad(slope_deg)) * np.cos(np.deg2rad(slope_direction_deg)) 
     vector_N = np.cos(np.deg2rad(slope_deg)) * np.sin(np.deg2rad(slope_direction_deg))
     vector_U = np.sin(np.deg2rad(slope_deg)) * -1
 

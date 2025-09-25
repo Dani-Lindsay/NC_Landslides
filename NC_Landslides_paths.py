@@ -9,18 +9,20 @@ Created on Wed Jun 11 11:13:55 2025
 import glob
 import os
 
-fig_dir = "/Volumes/Seagate/NC_Landslides/Figures"
+fig_dir = "/Volumes/Seagate/NC_Landslides/Figures/Sept24"
 data_dir = "/Volumes/Seagate/NC_Landslides/Data"
 inputs_dir = "/Volumes/Seagate/NC_Landslides/Inputs"
 ts_dir = "/Volumes/Seagate/NC_Landslides/Timeseries"
 ls_input_dir = os.path.join(data_dir, "NorCal_Slides")
-ts_out_dir = os.path.join(data_dir, "LS_Timeseries_2")
+ts_out_dir = os.path.join(data_dir, "LS_Timeseries_4")
 
 # ------------------------
 # Common Paths
 # ------------------------
 common_paths = {
     "fault_files": glob.glob(os.path.join(inputs_dir, "qfaults", "*.txt")),
+    "box_poly": glob.glob(os.path.join(inputs_dir, "box_polygons", "*.gmt")),
+    "wildfire_poly": glob.glob(os.path.join(inputs_dir, "wildfire_perimeters", "*.gmt")),
     "pb_file":  os.path.join(inputs_dir, "transform.gmt"),
     "pb2_file": os.path.join(inputs_dir, "trench.gmt"),
     "pb3_file": os.path.join(inputs_dir, "ridge.gmt"),
@@ -35,8 +37,8 @@ common_paths = {
         "Handwerger_WY2018": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2018landslides.kml"),
         "Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.kml"),
         "Xu_2021":         os.path.join(ls_input_dir, "Xu_2021_wcSlides.kml"),
-        "Lindsay_Coast":         os.path.join(ls_input_dir, "Lindsay_Coast.kml"),
-        "Lindsay_Inland":         os.path.join(ls_input_dir, "Lindsay_Inland.kml"),
+        "Lindsay_Coast":         os.path.join(ls_input_dir, "Coast_LS_DL.kml"),
+        "Lindsay_Inland":         os.path.join(ls_input_dir, "InLand_LS_DL.kml"),
         # add more sources here if needed…
     },
     "ls_geojson": {
@@ -53,6 +55,7 @@ common_paths = {
         "Lindsay_Inland": os.path.join(ls_input_dir, "Lindsay_Inland.geojson"),
     },
     "ls_gmt": {
+        "all_polygons": os.path.join(ls_input_dir, "all_polygons.txt"),
         "Bennett_Active": os.path.join(ls_input_dir, "Bennettetal_2016_Active_earthflows.txt"),
         "Bennett_Debris": os.path.join(ls_input_dir, "Bennettetal_2016_Debris_slides.txt"),
         "Bennett_Dormant": os.path.join(ls_input_dir, "Bennettetal_2016_Dormant_earthflows.txt"),
@@ -67,8 +70,8 @@ common_paths = {
     },
     "handwerger22_sup3": os.path.join(ls_input_dir, "2022gl099499-sup-0003-table si-s02.xlsx"),
     "handwerger22_sup4": os.path.join(ls_input_dir, "2022gl099499-sup-0004-table si-s03.xlsx"),
-    "ls_inventory_stats": os.path.join(data_dir, "landslide_inventory_stats.csv"),
-    "ls_inventory": os.path.join(data_dir, "landslide_inventory_ref_IDs.csv"),
+    #"ls_inventory_stats": os.path.join(data_dir, "landslide_inventory_stats.csv"),
+    "ls_inventory": os.path.join(data_dir, "landslide_inventory.csv"),
     "track_170_bbox": [(-125.249, 42.389), (-121.018, 41.843), (-121.833, 38.672), (-125.864, 39.22), (-125.249, 42.389)]
 }
 
