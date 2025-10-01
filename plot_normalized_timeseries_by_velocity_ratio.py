@@ -41,8 +41,9 @@ SPAN_WY23_COLOR = "#e6e6e6"  # slightly darker gray
 BAND_ALPHA = 0.25
 
 # Data locations
-CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/compiled_landslide_data.csv"
-H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4"   # where *.h5 live
+CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv"
+H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4"   # where *.h5 live
+
 
 # =========================
 # Helpers

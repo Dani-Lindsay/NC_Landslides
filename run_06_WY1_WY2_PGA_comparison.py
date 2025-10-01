@@ -24,7 +24,7 @@ vel_min_threshold = 2  # cm/yr (to filter out nearly-stable slides)
 # Load & prepare data
 # =========================
 df = pd.read_csv(
-    "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/compiled_landslide_data.csv"
+    "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv"
 )
 
 # Absolute velocities in cm/yr

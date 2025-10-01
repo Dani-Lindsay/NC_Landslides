@@ -49,7 +49,7 @@ bbox_poly = Polygon(bbox_coords)
 
 # Filters
 area_min      = 5000
-diameter_max  = 60000
+diameter_max  = 600000
 
 # 1) Convert KMLs → GeoJSON
 geojson_sources = {}
@@ -71,7 +71,12 @@ for src, gj in geojson_sources.items():
     frames.append(gdf[['geometry','source']])
 all_gdf = gpd.GeoDataFrame(pd.concat(frames, ignore_index=True), crs=frames[0].crs)
 
-# 3) Build overlap graph
+# 3) Filter by geographic region
+# Clip to bounding box (in geographic coords)
+bbox_gdf = gpd.GeoDataFrame(geometry=[bbox_poly], crs=4326).to_crs(all_gdf.crs)
+all_gdf = gpd.overlay(all_gdf, bbox_gdf, how="intersection")
+
+# 4) Build overlap graph
 all_gdf = all_gdf.to_crs(epsg=SRC_CRS)
 all_gdf['centroid'] = all_gdf.geometry.centroid
 all_gdf['area']     = all_gdf.geometry.area
@@ -89,7 +94,7 @@ for i, row in all_gdf.iterrows():
         if inter.area / min(row.area, all_gdf.at[j,'area']) >= OVERLAP_TH:
             G.add_edge(i,j)
 
-# 4) Extract components → stats
+# 5) Extract components → stats
 records = []
 for comp in nx.connected_components(G):
     subset    = all_gdf.loc[list(comp)]
@@ -158,6 +163,16 @@ df_stats = (pd
     ])
     .reset_index(drop=True)
 )
+
+
+# Keep only landslides whose center falls inside the bbox
+bbox_gdf = gpd.GeoDataFrame(geometry=[bbox_poly], crs=4326)
+mask = df_stats.apply(
+    lambda r: bbox_gdf.contains(Point(r['center_lon'], r['center_lat'])).iloc[0],
+    axis=1
+)
+df_stats = df_stats[mask].reset_index(drop=True)
+df_stats = df_stats.sort_values(by="center_lat", ascending=False).reset_index(drop=True)
 df_stats['ls_id'] = df_stats.index.map(lambda i: f"ls_{i+1:03d}")
 
 # 5) Enrich: per-source original IDs

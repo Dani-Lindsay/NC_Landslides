@@ -34,7 +34,9 @@ SEED_BOOT = 123
 # =========================
 # Load & prepare data
 # =========================
-df = pd.read_csv("/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/compiled_landslide_data.csv")
+#df = pd.read_csv("/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv")
+df = pd.read_csv(common_paths["ls_complied"])
+
 
 # Absolute velocities in cm/yr
 df["vel_dry1"] = np.abs(df["meta__ts_dry1_vel_myr"] * 100)

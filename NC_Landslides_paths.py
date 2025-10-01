@@ -9,17 +9,25 @@ Created on Wed Jun 11 11:13:55 2025
 import glob
 import os
 
-fig_dir = "/Volumes/Seagate/NC_Landslides/Figures/Sept24"
-data_dir = "/Volumes/Seagate/NC_Landslides/Data"
+fig_dir = "/Volumes/Seagate/NC_Landslides/Figures/Sept29"
+data_dir = "/Volumes/Seagate/NC_Landslides/Data_2"
 inputs_dir = "/Volumes/Seagate/NC_Landslides/Inputs"
-ts_dir = "/Volumes/Seagate/NC_Landslides/Timeseries"
+ts_dir = "/Volumes/Seagate/NC_Landslides/Timeseries_1"
 ls_input_dir = os.path.join(data_dir, "NorCal_Slides")
-ts_out_dir = os.path.join(data_dir, "LS_Timeseries_4")
+ts_out_dir = os.path.join(data_dir, "All_LS_Timeseries")
+ts_final_dir = os.path.join(data_dir, "LS_Timeseries")
+supporting_dir = "/Volumes/Seagate/NC_Landslides/Inputs/landslide_supporting"
 
 # ------------------------
 # Common Paths
 # ------------------------
 common_paths = {
+    "ls_inventory": os.path.join(data_dir, "landslide_inventory.csv"),
+    "ls_pga_precip": os.path.join(ts_final_dir, "landslides_wy_pga_precip_summary.csv"),
+    "ls_complied": os.path.join(ts_final_dir, "final_selection_only.csv"),
+    "ls_mapped2support": os.path.join(ts_final_dir, "final_selection_mapped.csv"),
+    "ls_disp_pga_precip" : os.path.join(ts_final_dir, "final_selection_with_wy_pga_precip.csv"),
+    
     "fault_files": glob.glob(os.path.join(inputs_dir, "qfaults", "*.txt")),
     "box_poly": glob.glob(os.path.join(inputs_dir, "box_polygons", "*.gmt")),
     "wildfire_poly": glob.glob(os.path.join(inputs_dir, "wildfire_perimeters", "*.gmt")),
@@ -71,8 +79,7 @@ common_paths = {
     "handwerger22_sup3": os.path.join(ls_input_dir, "2022gl099499-sup-0003-table si-s02.xlsx"),
     "handwerger22_sup4": os.path.join(ls_input_dir, "2022gl099499-sup-0004-table si-s03.xlsx"),
     #"ls_inventory_stats": os.path.join(data_dir, "landslide_inventory_stats.csv"),
-    "ls_inventory": os.path.join(data_dir, "landslide_inventory.csv"),
-    "track_170_bbox": [(-125.249, 42.389), (-121.018, 41.843), (-121.833, 38.672), (-125.864, 39.22), (-125.249, 42.389)]
+    "track_170_bbox": [(-125.249, 42.389), (-121.018, 41.843), (-121.833, 38.672), (-125.864, 39.22), (-125.249, 42.389)],
 }
 
     

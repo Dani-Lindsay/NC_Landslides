@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import os, glob, shutil
 import h5py, numpy as np, pandas as pd, matplotlib.pyplot as plt
-from NC_Landslides_paths import common_paths
+from NC_Landslides_paths import *
 
 # ─── USER CONFIG ────────────────────────────────────────────────────────────
-SRC_DIR   = "/Volumes/Seagate/NC_Landslides/Data/LS_Timeseries_4"
-DEST_DIR  = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4"
-INV_STATS = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/landslide_inventory_stats.csv"
+SRC_DIR   = ts_out_dir # "/Volumes/Seagate/NC_Landslides/Data/LS_Timeseries_4"
+DEST_DIR  = ts_final_dir #"/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4"
 os.makedirs(DEST_DIR, exist_ok=True)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -24,7 +23,12 @@ for fn in all_files:
             if isinstance(v, bytes):
                 rec[k] = v.decode()
             elif hasattr(v, "tolist"):
-                rec[k] = v.tolist()
+                v2 = v.tolist()
+                # normalize: scalar or 1-element list -> float
+                if isinstance(v2, (list, tuple)) and len(v2) == 1:
+                    rec[k] = v2[0]
+                else:
+                    rec[k] = v2
             else:
                 rec[k] = v
         # rename slide‐ID
@@ -65,7 +69,7 @@ candidates = df[df['ts_rmse_clean_m'] <= df['rmse_min'] + 0.1]
 # for each ls_id, pick the one with the lowest mean‐NN
 best = (
     candidates
-    .loc[candidates.groupby('ls_id')['ts_mean_nn_dist_m']
+    .loc[candidates.groupby('ls_id')['ts_mean_nn']
          .idxmin()]
     .reset_index(drop=True)
 )

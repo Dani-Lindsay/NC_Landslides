@@ -35,17 +35,29 @@ from hdf5_support import load_landslide_hdf5, _save_item
 from landslide_utlities import date_to_decimal_year
 
 import warnings
+from NC_Landslides_paths import *
 warnings.filterwarnings("ignore", message=".*errors='ignore'.*")
 
 
 # ---------------- User paths ----------------
-displacement_dir = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4"
-supporting_dir   = "/Volumes/Seagate/NC_Landslides/Inputs/landslide_supporting"
+displacement_dir = ts_final_dir
+supporting_dir   = supporting_dir #"/Volumes/Seagate/NC_Landslides/Inputs/landslide_supporting"
 
 # ---------------- Settings ----------------
 PGA_THRESHOLD_G = 0.001          # “felt” threshold
 WY_YEARS_TO_SAVE = [2022, 2023]  # water years to summarize
-OUTPUT_CSV = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/landslides_wy_summary.csv"
+OUTPUT_CSV = common_paths["ls_pga_precip"]
+# Map displacement ls_id -> supporting nearest_event_id from CSV (loaded once)
+MAPPING_CSV = "/Volumes/Seagate/NC_Landslides/Data_2/LS_Timeseries/final_selection_mapped.csv"
+
+try:
+    _map_df = pd.read_csv(MAPPING_CSV, dtype={"ls_id": str, "nearest_event_id": str})
+    _map_df = _map_df[["ls_id", "nearest_event_id"]].dropna()
+    _ID_TO_SUPPORT = dict(zip(_map_df["ls_id"].str.strip(),
+                              _map_df["nearest_event_id"].str.strip()))
+except Exception as e:
+    print(f"! Could not load mapping CSV ({MAPPING_CSV}): {e}")
+    _ID_TO_SUPPORT = {}
 
 # ---------------- Helpers ----------------
 def decimal_year_to_datetime(decimal_years):
@@ -67,9 +79,17 @@ def get_id_from_disp_filename(path):
     m = re.match(r"(ls_\d+)", os.path.basename(path))
     return m.group(1) if m else None
 
+# def supporting_path_for(disp_path):
+#     slid = get_id_from_disp_filename(disp_path)
+#     return os.path.join(supporting_dir, f"{slid}-supporting.h5") if slid else None
+
 def supporting_path_for(disp_path):
-    slid = get_id_from_disp_filename(disp_path)
-    return os.path.join(supporting_dir, f"{slid}-supporting.h5") if slid else None
+    """Return supporting H5 path using CSV-mapped nearest_event_id for this displacement file."""
+    slid = get_id_from_disp_filename(disp_path)  # e.g., "ls_001"
+    supp_id = _ID_TO_SUPPORT.get(slid) if slid else None
+    if not supp_id:  # no mapping → let caller skip
+        return None
+    return os.path.join(supporting_dir, f"{supp_id}-supporting.h5")
 
 def ensure_dataset(group, name, array_like):
     if name in group:
@@ -120,7 +140,11 @@ def process_pair(disp_path, supp_path):
         # --- Support meta/params (don’t touch original /meta or /params)
         if "support_meta" in disp:
             del disp["support_meta"]
-        _save_item(disp, "support_meta", {"eq_event_radius": support_data["meta"]["eq_event_radius"]})
+        _save_item(disp, "support_meta", {
+            "eq_event_radius": support_data["meta"]["eq_event_radius"],
+            "support_lat": support_data["meta"]["lat"],
+            "support_lon": support_data["meta"]["lon"],
+            })
 
         if "support_params" in disp:
             del disp["support_params"]
@@ -141,7 +165,9 @@ def process_pair(disp_path, supp_path):
 
         rain_14day = []
         for t in insar_dates:
-            m = (rain_dates >= t) & (rain_dates < t + timedelta(days=14))
+            window_end = t
+            window_start = t - timedelta(days=14)
+            m = (rain_dates > window_start) & (rain_dates <= window_end)
             rain_14day.append(np.nansum(rain_mm[m]) if np.any(m) else 0.0)
         rain_14day_cum = np.nancumsum(rain_14day)
 
@@ -154,7 +180,9 @@ def process_pair(disp_path, supp_path):
 
         pga_14day, eq_count = [], []
         for t in insar_dates:
-            m = (pga_time >= t) & (pga_time < t + timedelta(days=14))
+            window_end = t
+            window_start = t - timedelta(days=14)
+            m = (pga_time > window_start) & (pga_time <= window_end)
             if np.any(m):
                 pga_14day.append(np.nansum(pga_mean[m]))
                 eq_count.append(int(np.sum(pga_mean[m] > PGA_THRESHOLD_G)))
@@ -271,3 +299,87 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# #!/usr/bin/env python3
+# import pandas as pd
+
+# # ─── USER CONFIG ───────────────────────────────────────────────
+# wy_pga_precip_path = "landslides_wy_pga_precip_summary.csv"
+# final_selection_path = "final_selection_only.csv"
+# out_path_inner = "final_selection_with_wy_pga_precip.csv"
+# out_path_outer = "final_selection_with_wy_pga_precip_all.csv"
+# # ───────────────────────────────────────────────────────────────
+
+# # 1) Load both CSVs
+# wy_pga_precip = pd.read_csv(wy_pga_precip_path)
+# final_selection = pd.read_csv(final_selection_path)
+
+# # 2) Align column names (wy_pga_precip uses 'id', final_selection uses 'ls_id')
+# if "id" in wy_pga_precip.columns:
+#     wy_pga_precip = wy_pga_precip.rename(columns={"id": "ls_id"})
+
+# # 3) Inner join → only landslides that exist in both
+# merged_inner = pd.merge(final_selection, wy_pga_precip, on="ls_id", how="inner")
+# merged_inner.to_csv(out_path_inner, index=False)
+# print(f"Inner merge saved to {out_path_inner} with shape {merged_inner.shape}")
+
+# # 4) Outer join → keep all, fill missing with NaN
+# merged_outer = pd.merge(final_selection, wy_pga_precip, on="ls_id", how="outer", indicator=True)
+# merged_outer.to_csv(out_path_outer, index=False)
+# print(f"Outer merge saved to {out_path_outer} with shape {merged_outer.shape}")
+
+# # 5) Optional: check what’s missing
+# missing_in_final = merged_outer.loc[merged_outer["_merge"] == "right_only", "ls_id"].tolist()
+# missing_in_wy    = merged_outer.loc[merged_outer["_merge"] == "left_only", "ls_id"].tolist()
+
+# print("Missing in final_selection:", missing_in_final[:10], "..." if len(missing_in_final) > 10 else "")
+# print("Missing in wy_pga_precip:", missing_in_wy[:10], "..." if len(missing_in_wy) > 10 else "")
+
+# # --- Quick check plots for first 4 landslides ---
+# import matplotlib.pyplot as plt
+
+# def plot_first_four(disp_files):
+#     for dpath in disp_files[:4]:
+#         with h5py.File(dpath, "r") as f:
+#             ls_id = os.path.basename(dpath).split("_")[1]
+#             dates = pd.to_datetime([d.decode() for d in f["dates_14day"][:]], format="%Y%m%d")
+
+#             # displacement
+#             disp = np.asarray(f["clean_ts"][:], dtype=float) if "clean_ts" in f else None
+
+#             # PGA
+#             pga_14 = np.asarray(f["pga"]["pga_14day"], dtype=float)
+#             pga_cum = np.asarray(f["pga"]["pga_14day_cum"], dtype=float)
+
+#             # rainfall
+#             rain_14 = np.asarray(f["rainfall"]["rain_14day"], dtype=float)
+#             rain_cum = np.asarray(f["rainfall"]["rain_14day_cum"], dtype=float)
+
+#         fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
+#         fig.suptitle(f"Landslide {ls_id}")
+
+#         # 1) Displacement
+#         if disp is not None:
+#             axes[0].plot(dates[:len(disp)], disp, marker="o")
+#         axes[0].set_ylabel("Displacement (m)")
+
+#         # 2) PGA and cumulative PGA
+#         axes[1].bar(dates, pga_14, width=10, alpha=0.5, label="PGA (14d)")
+#         axes[1].plot(dates, pga_cum, color="r", label="Cumulative PGA")
+#         axes[1].set_ylabel("PGA (g)")
+#         axes[1].legend()
+
+#         # 3) Rainfall and cumulative rainfall
+#         axes[2].bar(dates, rain_14, width=10, alpha=0.5, label="Rain (14d)")
+#         axes[2].plot(dates, rain_cum, color="b", label="Cumulative Rain")
+#         axes[2].set_ylabel("Rainfall (mm)")
+#         axes[2].legend()
+
+#         plt.tight_layout()
+#         plt.show()
+
+# # Call after main()
+# if __name__ == "__main__":
+#     main()
+#     plot_first_four(disp_files)
+
