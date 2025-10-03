@@ -28,12 +28,12 @@ CONFIG = {
         "width": "ls_min_diameter_m",          # e.g., "ls_min_diameter_m"
         "aspect_ratio": None,   # optional if length/width not present
         "velocity": "ts_linear_vel_myr",       # e.g., "ts_linear_vel_myr" (m/yr)
-        "dist_coast_m": None,   # optional
+        "dist_coast_m": "dist_ocean_m",   # optional
         "dist_road_m": None,    # optional
     },
     "vel_thresh_cm_yr": 2.0,
     "area_unit": "m2",          # "m2" or "km2" (input unit of area column)
-    "coast_thresh_m": 500.0,
+    "coast_thresh_m": 5000.0,
     "road_thresh_m": None,
     "elongate_thresh": 2.0,
     "slump_hi": 2.5,
@@ -52,7 +52,7 @@ import numpy as np
 import pandas as pd
 from NC_Landslides_paths import *
 
-csv_path = os.path.join(ts_final_dir, "final_selection_only.csv")
+csv_path = os.path.join(ts_final_dir, "final_selection_with_wy_pga_precip.csv")
 
 try:
     import tkinter as tk
@@ -288,6 +288,86 @@ def main():
     pd.DataFrame([key_metrics]).to_csv(csv_out, index=False)
 
     print(f"\nSaved:\n  - {md_path}\n  - {csv_out}\n")
+    
+    # =========================
+    # Coastal vs Inland slope metrics (append to script)
+    # =========================
+    def _fmt_bins_line(bins_dict):
+        if not bins_dict:
+            return ""
+        return "; ".join([f"{k}: {v[0]} ({v[1]:.1f}%)" for k, v in bins_dict.items()])
+
+    def _slope_metrics_for(mask, label):
+        s = slope[mask].dropna().astype(float)
+        n = int(s.size)
+        med = float(np.nanmedian(s)) if n else float("nan")
+        bins = slope_bins_percent(s)
+        out = {
+            "label": label,
+            "count": n,
+            "median_slope_deg": None if np.isnan(med) else round(med, 1),
+            "bins_line": _fmt_bins_line(bins),
+            "<20_pct": None if not bins else round(bins["<20°"][1], 1),
+            "20–25_pct": None if not bins else round(bins["20–25°"][1], 1),
+            "25–35_pct": None if not bins else round(bins["25–35°"][1], 1),
+            "35–45_pct": None if not bins else round(bins["35–45°"][1], 1),
+            ">45_pct": None if not bins else round(bins[">45°"][1], 1),
+        }
+        return out
+
+    # Build coastal / inland masks from distance-to-coast (meters)
+    dist_col = colmap.get("dist_coast_m")
+    if dist_col and dist_col in df.columns:
+        dist_coast_m = _coerce_numeric(df[dist_col])
+        coast_thresh = float(CONFIG.get("coast_thresh_m", 10000.0))
+        coastal_mask = dist_coast_m <= coast_thresh
+        inland_mask  = dist_coast_m >  coast_thresh
+
+        # Compute metrics
+        met_coast  = _slope_metrics_for(coastal_mask, f"coastal(≤{int(coast_thresh)}m)")
+        met_inland = _slope_metrics_for(inland_mask,  f"inland(>{int(coast_thresh)}m)")
+
+        # Console summary
+        print("\n=== Coastal vs Inland: Slope metrics ===")
+        for m in (met_coast, met_inland):
+            print(f"{m['label']}: count={m['count']}, median={m['median_slope_deg']}°")
+            if m["bins_line"]:
+                print(f"  bins → {m['bins_line']}")
+
+        # LaTeX-ready sentences
+        coast_sentence = (
+            r"Coastal landslides are much steeper, with a median slope of "
+            f"{met_coast['median_slope_deg']}^\\circ "
+            f"compared with inland with a median of {met_inland['median_slope_deg']}^\\circ "
+            r"(Figure S\ref{fig:map_aspect_slope_height})."
+        )
+
+        inland_sentence = (
+            r"For the inland slides, we find "
+            f"{met_inland['<20_pct']}\\% of the slopes are shallow ($\\leq$ 20$^\\circ$), "
+            f"{met_inland['20–25_pct']}\\% are moderate (20–25$^\\circ$), "
+            f"{met_inland['25–35_pct']}\\% are steep (25–35$^\\circ$), "
+            f"{met_inland['35–45_pct']}\\% are very steep (35–45$^\\circ$), and "
+            f"{met_inland['>45_pct']}\\% are extremely steep ($\\geq$ 45$^\\circ$) "
+            r"(Figure \ref{fig:inventory_variables})."
+        )
+
+        print("\n--- LaTeX copy/paste ---")
+        print(coast_sentence)
+        print(inland_sentence)
+
+        # Write a tiny CSV next to your main outputs
+        base, _ = os.path.splitext(csv_path)
+        ci_csv = base + "_coast_inland_key_metrics.csv"
+        pd.DataFrame([met_coast, met_inland]).to_csv(ci_csv, index=False)
+        print(f"\nSaved coastal/inland metrics: {ci_csv}")
+
+    else:
+        print("\n[WARN] No coastal distance column found. "
+              "Set CONFIG['columns'][dist_ocean_m] to your distance-to-coast (m) column "
+              "or add it to the CSV to enable coastal/inland splits.")
+
 
 if __name__ == "__main__":
     main()
+    

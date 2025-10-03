@@ -138,3 +138,112 @@ print(f"Within both:                {n_within_both} ({pct(n_within_both, n_selec
 out_csv = os.path.splitext(CSV_PATH)[0] + f"_selected_proximity_{int(DIST_THRESH_M_coast)}m_coast.csv"
 res_df.to_csv(out_csv, index=False)
 print(f"\nSaved per-ID results: {out_csv}")
+
+# --- Config (tweak if needed) ---
+CSV_PATH = CSV_PATH if 'CSV_PATH' in globals() else "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/final_selection.csv"
+SLOPE_COL = "ls_mean_slope"   # column with mean slope
+DIST_COAST_COL = "dist_coast_m"  # distance to coast in meters (if absent, set to None and use your own mask)
+COAST_THRESH_M = 500.0        # coastal threshold in meters (match your study)
+
+import pandas as pd
+import numpy as np
+import os
+
+# --- Load data if df not already present ---
+if 'df' not in globals():
+    df = pd.read_csv(CSV_PATH)
+
+def _coerce_numeric(s: pd.Series) -> pd.Series:
+    return pd.to_numeric(s, errors="coerce")
+
+def _slope_to_degrees(s: pd.Series) -> pd.Series:
+    """
+    Convert slope to degrees if needed:
+    - If values look like radians (max <= ~1.6), convert rad->deg.
+    - If values look normalized (0..1.0-ish, max <= 1.0), map to 0..90° by ×90.
+    - Otherwise assume already in degrees.
+    """
+    x = _coerce_numeric(s).astype(float)
+    if x.dropna().empty:
+        return x
+    smax = np.nanmax(x)
+    if smax <= 1.6 and np.nanmean(x) < 1.0:   # likely radians
+        return np.degrees(x)
+    if smax <= 1.0:                           # likely normalized 0..1
+        return x * 90.0
+    return x                                   # already degrees
+
+def slope_bins_percent(s_deg: pd.Series):
+    """Return ordered dict of (count, pct) for bins <20, 20–25, 25–35, 35–45, >45°."""
+    s = _coerce_numeric(s_deg).dropna()
+    if s.empty:
+        return {}
+    n = len(s)
+    bins = {
+        "<20°":      (s < 20).sum(),
+        "20–25°":    ((s >= 20) & (s <= 25)).sum(),
+        "25–35°":    ((s >= 25) & (s <= 35)).sum(),
+        "35–45°":    ((s >= 35) & (s <= 45)).sum(),
+        ">45°":      (s > 45).sum(),
+    }
+    return {k: (v, 100.0*v/n) for k, v in bins.items()}
+
+# --- Build masks: coastal vs inland ---
+if DIST_COAST_COL in df.columns:
+    dist_coast = _coerce_numeric(df[DIST_COAST_COL])
+    coastal_mask = dist_coast <= COAST_THRESH_M
+else:
+    # If you don't have a distance column in the CSV, you can import a coastal ID list and build a mask instead.
+    raise KeyError(f"'{DIST_COAST_COL}' not found in df. Provide a coastal mask or add the distance column.")
+
+inland_mask = ~coastal_mask
+
+# --- Prepare slope in degrees ---
+if SLOPE_COL not in df.columns:
+    raise KeyError(f"'{SLOPE_COL}' not found in df.")
+
+s_all_deg = _slope_to_degrees(df[SLOPE_COL])
+s_coast = s_all_deg[coastal_mask]
+s_inland = s_all_deg[inland_mask]
+
+# --- Stats ---
+med_coast = float(np.nanmedian(s_coast)) if s_coast.notna().any() else np.nan
+med_inland = float(np.nanmedian(s_inland)) if s_inland.notna().any() else np.nan
+
+bins_inland = slope_bins_percent(s_inland)
+bins_coast  = slope_bins_percent(s_coast)
+
+def fmt_bins_line(bins):
+    # "<20°: 86 (19.7%); 20–25°: 85 (19.5%); ..."
+    if not bins: return "N/A"
+    return "; ".join([f"{k}: {v[0]} ({v[1]:.1f}%)" for k, v in bins.items()])
+
+# --- Console summary ---
+print("\n=== Slope metrics by region ===")
+print(f"Coastal median slope: {med_coast:.1f}°  |  Inland median slope: {med_inland:.1f}°")
+print(f"Inland slope bins: {fmt_bins_line(bins_inland)}")
+print(f"Coastal slope bins: {fmt_bins_line(bins_coast)}")
+
+# --- LaTeX-ready lines for manuscript ---
+latex_coast = (
+    rf"Coastal landslides are much steeper, with a median slope of {med_coast:.1f}$^\circ$ "
+    r"(Figure S\ref{fig:map_aspect_slope_height})."
+)
+
+# Expand inland bin percentages into the requested narrative order
+def pct(b, key): 
+    return f"{b[key][1]:.1f}\\%" if key in b else "N/A"
+inland_line = (
+    r"For the inland slides, we find "
+    rf"{pct(bins_inland,'<20°')} of slopes are shallow ($\leq$ 20$^\circ$), "
+    rf"{pct(bins_inland,'20–25°')} are moderate (20–25$^\circ$), "
+    rf"{pct(bins_inland,'25–35°')} are steep (25–35$^\circ$), "
+    rf"{pct(bins_inland,'35–45°')} are very steep (35–45$^\circ$), and "
+    rf"{pct(bins_inland,'>45°')} are extremely steep ($\geq$ 45$^\circ$) "
+    r"(Figure \ref{fig:inventory_variables})."
+)
+
+print("\n--- LaTeX copy/paste ---")
+print(latex_coast)
+print(inland_line)
+

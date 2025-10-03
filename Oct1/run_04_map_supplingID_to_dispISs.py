@@ -119,7 +119,7 @@ df_support = pd.DataFrame.from_dict(supporting_d)
 
 df_map = map_target_to_support(df_support, df_target)
 
-df_map.to_csv(os.path.join(ts_final_dir, "final_selection_mapped.csv"), index=False)
+df_map.to_csv(os.path.join(ts_final_dir, "final_selection_only_mapped.csv"), index=False)
     
     
 

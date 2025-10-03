@@ -36,8 +36,11 @@ SPAN_WY23_COLOR = "#e6e6e6"
 BAND_ALPHA = 0.25
 
 # Data locations
-CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/compiled_landslide_data.csv"
-H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4"
+CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv"
+H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4"
+
+CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data_3/LS_Timeseries/final_selection_only_with_pga_precip.csv"
+H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data_3/LS_Timeseries"
 
 # =========================
 # Helpers
@@ -65,7 +68,7 @@ def summarize_panel(df_paths, method="minmax", window=5):
     series_list = []
     n_failed = 0
     for _, row in df_paths.iterrows():
-        fpath = row["file"]
+        fpath = row["file_y"]
         try:
             dates, ts, sign = load_timeseries(fpath)
             s = normalize_ts(dates, ts, sign, method=method)
@@ -129,14 +132,14 @@ def plot_panel(ax, long, summary, title, n_series, n_failed, norm_method):
 # =========================
 df = pd.read_csv(CSV_PATH)
 
-df["vel_dry1"] = np.abs(df["meta__ts_dry1_vel_myr"] * 100)
-df["vel_dry2"] = np.abs(df["meta__ts_dry2_vel_myr"] * 100)
+df["vel_dry1"] = np.abs(df["ts_dry1_vel_myr"] * 100)
+df["vel_dry2"] = np.abs(df["ts_dry2_vel_myr"] * 100)
 df["vel_ratio"] = df["vel_dry2"] / df["vel_dry1"]
 
 df = df[(df["vel_dry1"] >= vel_min_threshold) | (df["vel_dry2"] >= vel_min_threshold)].copy()
 
 # PGA ratio and groups
-df["pga_ratio"] = df["support_params/wy23_vs_wy22_pga_ratio"]
+df["pga_ratio"] = df["wy23_vs_wy22_pga_ratio"]
 
 def categorize_pga_group(ratio):
     if ratio < 0.6:
@@ -161,7 +164,7 @@ for fp in h5_files:
     try:
         with h5py.File(fp, "r") as hf:
             sid = hf["meta"].attrs.get("ID")
-            h5_records.append({"ls_id": str(sid), "file": fp})
+            h5_records.append({"ls_id": str(sid), "file_y": fp})
     except Exception:
         continue
 df_h5 = pd.DataFrame(h5_records).dropna()
@@ -173,7 +176,8 @@ csv_id_col = id_candidates[0]
 df[csv_id_col] = df[csv_id_col].astype(str)
 
 merged = df.merge(df_h5, left_on=csv_id_col, right_on="ls_id", how="left")
-if merged["file"].isna().any():
+
+if merged["file_y"].isna().any():
     print(f"[info] {merged['file'].isna().sum()} slides lacked a matching HDF5 and will be skipped.")
 
 # =========================
@@ -194,10 +198,10 @@ axes = axes.flatten()
 
 for ax, (name, is_group) in zip(axes, panel_groups):
     if is_group:
-        sub = merged[(merged["group"] == name) & merged["file"].notna()][["ls_id","file"]].copy()
+        sub = merged[(merged["group"] == name) & merged["file_y"].notna()][["ls_id","file_y"]].copy()
         title = f"{name}"
     else:
-        sub = merged[(merged["group"] != "Much Lower") & merged["file"].notna()][["ls_id","file"]].copy()
+        sub = merged[(merged["group"] != "Much Lower") & merged["file_y"].notna()][["ls_id","file_y"]].copy()
         title = "Active (exclude Much Lower)"
 
     long, summary, n_series, n_points, n_failed = summarize_panel(sub, method=NORM_METHOD, window=SMOOTH_WIN)

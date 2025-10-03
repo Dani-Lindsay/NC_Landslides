@@ -12,7 +12,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 # Load and prepare data
-df = pd.read_csv("/Volumes/Seagate/NC_Landslides/Data/LS_Final_TS_4/compiled_landslide_data.csv")
+df = pd.read_csv("/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv")
 
 # Compute absolute velocities in cm/yr
 df["vel_dry1"] = np.abs(df["meta__ts_dry1_vel_myr"] * 100)
@@ -82,5 +82,5 @@ for i, var in enumerate(plot_vars):
 # Overall layout
 fig.suptitle("Comparison of Landslide Groups by External and Geometric Variables", fontsize=12)
 plt.tight_layout(rect=[0, 0, 1, 0.96])
-plt.savefig("/mnt/data/velocity_response_violin_grid.png", dpi=300)
+plt.savefig("velocity_response_violin_grid.png", dpi=300)
 plt.show()

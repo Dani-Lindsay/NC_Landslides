@@ -49,18 +49,32 @@ bbox_poly = Polygon(bbox_coords)
 
 # Filters
 area_min      = 5000
-diameter_max  = 600000
+diameter_max  = 1000000
 
-# 1) Convert KMLs → GeoJSON
+# 1. Convert each KML to GeoJSON
 geojson_sources = {}
 for src, kml in common_paths['ls_kmls'].items():
-    geojson = common_paths['ls_geojson'][src]
+    gj = common_paths['ls_geojson'][src]
     layers = fiona.listlayers(kml)
-
-    # (same logic as before…) convert & merge multi-layer
-    # … [omitted for brevity; your existing code goes here]
-    # at the end:
-    geojson_sources[src] = geojson
+    if len(layers) <= 1:
+        if not os.path.exists(gj):
+            os.makedirs(os.path.dirname(gj), exist_ok=True)
+            subprocess.run(['ogr2ogr','-skipfailures','-f','GeoJSON',gj,kml],check=True)
+    else:
+        parts=[]
+        for lyr in layers:
+            temp = os.path.splitext(gj)[0]+f"__{lyr}.geojson"
+            subprocess.run(['ogr2ogr','-skipfailures','-f','GeoJSON',temp,kml,lyr],check=True)
+            try: parts.append(gpd.read_file(temp))
+            except: pass
+        if parts:
+            merged = pd.concat(parts,ignore_index=True)
+            merged = gpd.GeoDataFrame(merged,geometry='geometry',crs=parts[0].crs)
+            merged.to_file(gj,driver='GeoJSON')
+        for lyr in layers:
+            tmp=os.path.splitext(gj)[0]+f"__{lyr}.geojson"
+            if os.path.exists(tmp): os.remove(tmp)
+    geojson_sources[src] = gj
 
 # 2) Load all polygons and tag by source
 frames = []

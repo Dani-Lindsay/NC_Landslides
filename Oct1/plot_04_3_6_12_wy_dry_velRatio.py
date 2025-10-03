@@ -48,7 +48,7 @@ num_groups = 5
 # =========================
 # Load & prepare data
 # =========================
-df = pd.read_csv(os.path.join(ts_final_dir, "final_selection_with_wy_pga_precip.csv"))
+df = pd.read_csv(os.path.join(ts_final_dir, "final_selection_only_with_pga_precip.csv"))
 
 num_ls = len(df)
 
@@ -104,6 +104,110 @@ for v1, v2, lbl, _ttl in PAIRS:
     if v1 not in df.columns or v2 not in df.columns:
         raise ValueError(f"Missing expected columns: {v1} or {v2}")
     df = process_one_period(df, v1, v2, lbl)
+    
+# =========================
+# Manuscript-support stats (ACTIVE ONLY: exclude "Low Rate")
+# =========================
+WIN_LABELS = [
+    ("EQ_3m",  "3 months"),
+    ("EQ_6m",  "6 months"),
+    ("EQ_9m",  "9 months"),
+    ("EQ_12m", "12 months"),
+    ("WY",     "the water year"),
+]
+
+def _active_series(label):
+    """Return categorical Series with 'Low Rate' removed."""
+    col = f"group_{label}"
+    s = df[col].astype("string")
+    return s[s != "Low Rate"]  # active only
+
+def _active_counts(label):
+    """Counts among active only."""
+    s = _active_series(label)
+    n = s.size
+    return {
+        "N_active": n,
+        "Much Faster": int((s == "Much Faster").sum()),
+        "Faster":      int((s == "Faster").sum()),
+        "Similar":     int((s == "Similar").sum()),
+        "Slower":      int((s == "Slower").sum()),
+        "Much Slower": int((s == "Much Slower").sum()),
+    }
+
+def _pct(x, den):
+    return 100.0 * x / den if den > 0 else float("nan")
+
+def _dist_line_active(label):
+    c = _active_counts(label)
+    n = c["N_active"]
+    parts = []
+    for k in ["Much Slower","Slower","Similar","Faster","Much Faster"]:
+        parts.append(f"{k}: {c[k]} ({_pct(c[k], n):.1f}%)")
+    return "; ".join(parts), n
+
+# --- Core highlight sentence (Much Faster among active only) ---
+c3 = _active_counts("EQ_3m")
+c6 = _active_counts("EQ_6m")
+c9 = _active_counts("EQ_9m")
+c12 = _active_counts("EQ_12m")
+
+pct_mf_3  = _pct(c3["Much Faster"],  c3["N_active"])
+pct_mf_6  = _pct(c6["Much Faster"],  c6["N_active"])
+pct_mf_9  = _pct(c9["Much Faster"],  c9["N_active"])
+pct_mf_12 = _pct(c12["Much Faster"], c12["N_active"])
+
+print("\n--- Velocity-ratio highlights (ACTIVE ONLY) ---")
+print(f"In the three months following the 2022 earthquake, "
+      f"{pct_mf_3:.1f}% of landslides were classified as Much Faster "
+      f"(N={c3['Much Faster']} of {c3['N_active']}).")
+print(f"For the 6, 9, and 12-month windows, the fractions classified as Much Faster "
+      f"were {pct_mf_6:.1f}%, {pct_mf_9:.1f}%, and {pct_mf_12:.1f}%, respectively.")
+
+# --- Distributions by window (active only) ---
+print("\nCategory distributions by window (percent of ACTIVE slides):")
+for lab, pretty in WIN_LABELS:
+    line, n = _dist_line_active(lab)
+    print(f"{pretty:>12}: {line}   [N={n}]")
+
+# --- Symmetry table (active only) ---
+def _pct_active(label, target):
+    s = _active_series(label)
+    return _pct((s == target).sum(), s.size)
+
+print("\nSymmetry (among ACTIVE slides only):")
+for lab, pretty in WIN_LABELS:
+    print(f"{pretty:>12}: Much Faster = {_pct_active(lab,'Much Faster'):.1f}%, "
+          f"Similar = {_pct_active(lab,'Similar'):.1f}%, "
+          f"Much Slower = {_pct_active(lab,'Much Slower'):.1f}%")
+
+# --- Optional: 12-month median |V1| and |V2| per category (ACTIVE only) ---
+def _median_v_by_cat_active(label):
+    v1 = df[f"{label}_v1_cm"]
+    v2 = df[f"{label}_v2_cm"]
+    s  = _active_series(label)              # drops Low Rate
+    out = {}
+    for c in ["Much Slower","Slower","Similar","Faster","Much Faster"]:
+        m = (df[f"group_{label}"].astype("string") == c) & (df[f"group_{label}"] != "Low Rate")
+        if m.any():
+            out[c] = (float(np.nanmedian(v1[m])), float(np.nanmedian(v2[m])))
+    return out
+
+print("\n3-month median absolute velocities by category (cm/yr, ACTIVE only):")
+for cat, (m1, m2) in _median_v_by_cat_active("EQ_3m").items():
+    print(f"{cat:>12}: median V1 = {m1:.1f}, median V2 = {m2:.1f}")
+    
+print("\n6-month median absolute velocities by category (cm/yr, ACTIVE only):")
+for cat, (m1, m2) in _median_v_by_cat_active("EQ_6m").items():
+    print(f"{cat:>12}: median V1 = {m1:.1f}, median V2 = {m2:.1f}")
+    
+print("\n9-month median absolute velocities by category (cm/yr, ACTIVE only):")
+for cat, (m1, m2) in _median_v_by_cat_active("EQ_9m").items():
+    print(f"{cat:>12}: median V1 = {m1:.1f}, median V2 = {m2:.1f}")
+    
+print("\n12-month median absolute velocities by category (cm/yr, ACTIVE only):")
+for cat, (m1, m2) in _median_v_by_cat_active("EQ_12m").items():
+    print(f"{cat:>12}: median V1 = {m1:.1f}, median V2 = {m2:.1f}")
 
 # =========================
 # Plotting helpers (PyGMT)

@@ -19,7 +19,7 @@ from NC_Landslides_paths import *
 # ─── USER CONFIG ───────────────────────────────────────────────
 wy_pga_precip_path = os.path.join(ts_final_dir, "final_selection_only_mapped_pga_precip.csv")
 final_selection_path = os.path.join(ts_final_dir, "final_selection_only_mapped.csv")
-out_path_inner = os.path.join(ts_final_dir, "final_selection_with_wy_pga_precip.csv")
+out_path_inner = os.path.join(ts_final_dir, "final_selection_only_with_pga_precip.csv")
 #out_path_outer = "final_selection_with_wy_pga_precip_all.csv"
 # ───────────────────────────────────────────────────────────────
 
@@ -47,3 +47,4 @@ missing_in_wy    = merged_outer.loc[merged_outer["_merge"] == "left_only", "ls_i
 
 print("Missing in final_selection:", missing_in_final[:10], "..." if len(missing_in_final) > 10 else "")
 print("Missing in wy_pga_precip:", missing_in_wy[:10], "..." if len(missing_in_wy) > 10 else "")
+

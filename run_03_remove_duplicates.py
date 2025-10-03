@@ -120,7 +120,7 @@ for ls, grp in df.groupby("ls_id"):
         plt.plot(d, ts - np.nanmean(ts), "k-", lw=2, label="BEST")
         plt.title(f"Slide {ls}")
         plt.legend(fontsize="small")
-        png = os.path.join(DEST_DIR, f"{ls}_comparison.png")
+        png = os.path.join(DEST_DIR, f"{fig_dir}/Duplicates/{ls}_comparison.png")
         plt.savefig(png, dpi=200)
         plt.close()
         # copy best file

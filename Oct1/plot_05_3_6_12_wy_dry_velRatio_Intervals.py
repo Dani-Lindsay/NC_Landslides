@@ -36,10 +36,10 @@ CAT_COLORS = {
 
 # Five velocity windows: (v1_col, v2_col, short_label, panel_title)
 PAIRS = [
-    ("ts_eq1_3month_vel_myr",  "ts_eq2_3month_vel_myr",  "EQ_3m",  "3 month"),
-    ("ts_eq1_6month_vel_myr",  "ts_eq2_6month_vel_myr",  "EQ_6m",  "6 month"),
-    ("ts_eq1_9month_vel_myr",  "ts_eq2_9month_vel_myr",  "EQ_9m",  "9 month"),
-    ("ts_eq1_12month_vel_myr", "ts_eq2_12month_vel_myr", "EQ_12m", "12 month"),
+    ("ts_eq1_3month_vel_myr",  "ts_eq2_3month_vel_myr",  "0_3m",  "0-3 month"),
+    ("ts_eq1_3-6month_vel_myr",  "ts_eq2_3-6month_vel_myr",  "3_6m",  "3-6 month"),
+    ("ts_eq1_6-9month_vel_myr",  "ts_eq2_6-9month_vel_myr",  "6_9m",  "6-9 month"),
+    ("ts_eq1_9-12month_vel_myr", "ts_eq2_9-12month_vel_myr", "9_12m", "9-12 month"),
     ("ts_wy22_vel_myr",        "ts_wy23_vel_myr",        "WY",     "Water Year"),
 ]
 
@@ -48,7 +48,7 @@ num_groups = 5
 # =========================
 # Load & prepare data
 # =========================
-df = pd.read_csv(os.path.join(ts_final_dir, "final_selection_with_wy_pga_precip.csv"))
+df = pd.read_csv(os.path.join(ts_final_dir, "final_selection_only_with_pga_precip.csv"))
 
 num_ls = len(df)
 
@@ -156,8 +156,8 @@ with fig.subplot(
     frame=["xaf+lV1 (cm/yr, abs)", f"yaf+lV2 (cm/yr, abs)", "WSrt"]):
     
     # Scatter plots
-    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["WSrt+t3 Months", "xa", "ya"], panel=True)
-    plot_one_panel(fig, df, "EQ_3m", CAT_ORDER)
+    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["WSrt+t0-3 Months", "xa", "ya"], panel=True)
+    plot_one_panel(fig, df, "0_3m", CAT_ORDER)
     fig.plot(x = 100, y = 100, style="c0.25c", fill=CAT_COLORS["Low Rate"], pen="gray25", label= "Low Rate+N6")
     fig.plot(x = 100, y = 100, style="c0.25c", fill=CAT_COLORS["Much Slower"], pen="gray25", label= "Much Slower")
     fig.plot(x = 100, y = 100, style="c0.25c", fill=CAT_COLORS["Slower"], pen="gray25", label= "Slower")
@@ -173,25 +173,23 @@ with fig.subplot(
             ):
         fig.legend(position="JBC+jBC+w20c+o10.5/-1.75c", box=False)
         
-    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["wSrt+t6 Months", "xa", "ya"], panel=True)
-    plot_one_panel(fig, df, "EQ_6m", CAT_ORDER)
+    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["wSrt+t3-6 Months", "xa", "ya"], panel=True)
+    plot_one_panel(fig, df, "3_6m", CAT_ORDER)
     
-    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["wSrt+t9 Months", "xa", "ya"], panel=True)
-    plot_one_panel(fig, df, "EQ_9m", CAT_ORDER)
+    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["wSrt+t6-9 Months", "xa", "ya"], panel=True)
+    plot_one_panel(fig, df, "6_9m", CAT_ORDER)
     
-    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["wSrt+t12 Months", "xa", "ya"], panel=True)
-    plot_one_panel(fig, df, "EQ_12m", CAT_ORDER)
+    fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["wSrt+t9-12 Months", "xa", "ya"], panel=True)
+    plot_one_panel(fig, df, "9_12m", CAT_ORDER)
     
     fig.basemap(region=SCATTER_REGION, projection=SCATTER_PROJ, frame=["wSrt+tWater Year", "xa", "ya"], panel=True)
     plot_one_panel(fig, df, "WY", CAT_ORDER)
     
 
-
-    
 fig.shift_origin(xshift="0c", yshift="-4c")
 
 # We’ll draw 5 rows (one per window), columns = landslides (in df order)
-labels_for_rows = ["WY", "EQ_12m","EQ_9m", "EQ_6m", "EQ_3m"]
+labels_for_rows = ["WY", "9_12m","6_9m", "3_6m", "0_3m"]
 n_rows = len(labels_for_rows)
 n_cols = len(df)
 
@@ -234,7 +232,7 @@ fig.basemap(region=[-20, n_cols, -0.5, n_rows - 0.5],            # y spans row i
     frame=["WSrt", "xa+lLandslide ID (sorted by latitude)"],)
 
 # fig.savefig("vel_ratio_panels_pygmt.png", dpi=300)
-out_base = f"{fig_dir}/Fig_9_VelRatio_3-6-9-12_minvel{VEL_MIN_CM}_multiple{VEL_MULTIPLE}"
+out_base = f"{fig_dir}/Fig_9_VelRatio_3-6-9-12_minvel{VEL_MIN_CM}_multiple{VEL_MULTIPLE}_intervals"
 fig.savefig(out_base + ".png", crop=True, dpi=300, anti_alias=True, show=False)
 fig.savefig(out_base + ".jpeg", crop=True, dpi=300, anti_alias=True, show=False)
 fig.savefig(out_base + ".pdf", crop=True, dpi=300, anti_alias=True, show=False)

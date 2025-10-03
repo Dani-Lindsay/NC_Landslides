@@ -14,6 +14,8 @@ from NC_Landslides_paths import *
 
 
 csv_path = os.path.join(ts_final_dir, "final_selection.csv")
+box_df = pd.read_csv('/Volumes/Seagate/NC_Landslides/Inputs/box_corners_all.csv')
+
 # Load data
 df = pd.read_csv(csv_path)
 ls_lons = df['center_lon'].values
@@ -22,7 +24,7 @@ ls_lats = df['center_lat'].values
 # ls_vel  = df['ts_linear_vel_myr'].values*100
 
 
-box_df = pd.read_csv('/Volumes/Seagate/NC_Landslides/Inputs/box_corners_all.csv')
+
 
 # Sort by absolute velocity so largest magnitudes plot last
 order = np.argsort(np.abs(ls_lats))

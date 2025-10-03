@@ -45,13 +45,8 @@ common_paths = {
         "Handwerger_WY2018": os.path.join(ls_input_dir, "Handwergeretal_2019_WY2018landslides.kml"),
         "Mackey_2011":     os.path.join(ls_input_dir, "MackeyandRoering2011_inventory.kml"),
         "Xu_2021":         os.path.join(ls_input_dir, "Xu_2021_wcSlides.kml"),
-        "Lindsay_Coast":         os.path.join(ls_input_dir, "Lindsay_Coast.kml"),
-        #"Lindsay_Inland":         os.path.join(ls_input_dir, "Lindsay_Inland_ori1.kml"),
-        "Lindsay_Inland":         os.path.join(ls_input_dir, "Lindsay_Inland.kml"),
-        #"Lindsay_Inland2":         os.path.join(ls_input_dir, "Lindsay_Inland.kml"),
-        #"Lindsay_Coast":         os.path.join(ls_input_dir, "Coast_LS_DL.kml"),
-        #"Lindsay_Inland":         os.path.join(ls_input_dir, "InLand_LS_DL.kml"),
-        #"Lindsay_Inland_2":         os.path.join(ls_input_dir, "InLand_LS_DL.kml"),
+        "Lindsay_Coast":         os.path.join(ls_input_dir, "Coast_LS_DL.kml"),
+        "Lindsay_Inland":         os.path.join(ls_input_dir, "InLand_LS_DL.kml"),
         # add more sources here if needed…
     },
     "ls_geojson": {

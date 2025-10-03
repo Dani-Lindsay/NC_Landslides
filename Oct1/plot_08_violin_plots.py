@@ -24,23 +24,25 @@ import pygmt  # (unused here, but kept if other parts rely on it)
 # Parameters
 # -------------------------
 vel_min_threshold = 2     # cm/yr threshold for inclusion (>= in either year)
-vel_multiple      = 5     # ratio cut for "Much Faster/Slower"
+vel_multiple      = 4     # ratio cut for "Much Faster/Slower"
 active_threshold  = 1     # cm/yr threshold for active/inactive annotation
 
 ALPHA = 0.05
-B_BOOT = 10_000
+B_BOOT = 10000
 SEED_BOOT = 123
+
+time_label = "12month"
 
 # =========================
 # Load & prepare data
 # =========================
-df = pd.read_csv("/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv")
-#df = pd.read_csv(common_paths["ls_complied"])
+#df = pd.read_csv("/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv")
+df = pd.read_csv(os.path.join(ts_final_dir, "final_selection_only_with_pga_precip.csv"))
 
 
 # Absolute velocities in cm/yr
-df["vel_dry1"] = np.abs(df["meta__ts_dry1_vel_myr"] * 100)
-df["vel_dry2"] = np.abs(df["meta__ts_dry2_vel_myr"] * 100)
+df["vel_dry1"] = np.abs(df[f"ts_eq1_{time_label}_vel_myr"] * 100)
+df["vel_dry2"] = np.abs(df[f"ts_eq2_{time_label}_vel_myr"] * 100)
 
 # Keep a copy of low-rate for plotting
 df_lowrate = df[(df["vel_dry1"] < vel_min_threshold) | (df["vel_dry2"] < vel_min_threshold)].copy()
@@ -153,9 +155,9 @@ ax.tick_params(labelsize=10)
 ax.legend(fontsize=9, title_fontsize=10, loc='upper right')
 
 plt.tight_layout()
-plt.savefig(f"{fig_dir}/Fig_4_dry_velocity_comparison_x{vel_multiple}_minvel{vel_min_threshold}.png", dpi=300)
-plt.savefig(f"{fig_dir}/Fig_4_dry_velocity_comparison_x{vel_multiple}_minvel{vel_min_threshold}.jpeg", dpi=300)
-plt.savefig(f"{fig_dir}/Fig_4_dry_velocity_comparison_x{vel_multiple}_minvel{vel_min_threshold}.pdf")
+plt.savefig(f"{fig_dir}/Fig_4_dry_velocity_comparison_x{vel_multiple}_minvel{vel_min_threshold}_{time_label}.png", dpi=300)
+plt.savefig(f"{fig_dir}/Fig_4_dry_velocity_comparison_x{vel_multiple}_minvel{vel_min_threshold}_{time_label}.jpeg", dpi=300)
+plt.savefig(f"{fig_dir}/Fig_4_dry_velocity_comparison_x{vel_multiple}_minvel{vel_min_threshold}_{time_label}.pdf")
 plt.show()
 
 # --- Fig 5: Violin plots by group (same aesthetics) ---
@@ -165,22 +167,22 @@ sns.set(style="whitegrid")
 plt.rcParams.update({"axes.titlesize": 10, "axes.labelsize": 9, "xtick.labelsize": 8, "ytick.labelsize": 8})
 
 top_vars = [
-    "support_params/wy23_vs_wy22_rain_ratio",
-    "support_params/wy23_vs_wy22_pga_ratio",
-    "support_params/wy23_vs_wy22_eq_ratio",
-    "meta__ls_mean_slope",
-    "meta__ls_axis_ratio",
-    "meta__ts_cluster_area_m2"
+    "wy23_vs_wy22_rain_ratio",
+    "wy23_vs_wy22_pga_ratio",
+    "wy23_vs_wy22_eq_ratio",
+    "ls_mean_slope",
+    "ls_axis_ratio",
+    "ts_cluster_area_m2"
 ]
 
-df["log_area"] = np.log10(df["meta__ts_cluster_area_m2"])
+df["log_area"] = np.log10(df["ts_cluster_area_m2"])
 
 pretty_names = {
-    "support_params/wy23_vs_wy22_rain_ratio": "Rainfall WY23/WY22",
-    "support_params/wy23_vs_wy22_pga_ratio":  "PGA WY23/WY22",
-    "support_params/wy23_vs_wy22_eq_ratio":   "EQ Count WY23/WY22",
-    "meta__ls_mean_slope":                    "Mean Slope (°)",
-    "meta__ls_axis_ratio":                    "Axis Ratio",
+    "wy23_vs_wy22_rain_ratio": "Rainfall WY23/WY22",
+    "wy23_vs_wy22_pga_ratio":  "PGA WY23/WY22",
+    "wy23_vs_wy22_eq_ratio":   "EQ Count WY23/WY22",
+    "ls_mean_slope":                    "Mean Slope (°)",
+    "ls_axis_ratio":                    "Axis Ratio",
     "log_area":                               "Log Area (m²)"
 }
 
@@ -203,9 +205,9 @@ for ax, lab in zip(axes, ['a', 'b', 'c', 'd', 'e', 'f']):
     ax.text(0.02, 1.1, f'{lab})', transform=ax.transAxes, ha='left', va='top', fontsize=10)
 
 plt.tight_layout()
-fig.savefig(f"{fig_dir}/Fig_5_violin_plots_x{vel_multiple}_minvel{vel_min_threshold}.png", dpi=300)
-fig.savefig(f"{fig_dir}/Fig_5_violin_plots_x{vel_multiple}_minvel{vel_min_threshold}.jpeg", dpi=300)
-fig.savefig(f"{fig_dir}/Fig_5_violin_plots_x{vel_multiple}_minvel{vel_min_threshold}.pdf")
+fig.savefig(f"{fig_dir}/Fig_5_violin_plots_x{vel_multiple}_minvel{vel_min_threshold}_{time_label}.png", dpi=300)
+fig.savefig(f"{fig_dir}/Fig_5_violin_plots_x{vel_multiple}_minvel{vel_min_threshold}_{time_label}.jpeg", dpi=300)
+fig.savefig(f"{fig_dir}/Fig_5_violin_plots_x{vel_multiple}_minvel{vel_min_threshold}_{time_label}.pdf")
 plt.show()
 
 # =========================
@@ -395,11 +397,11 @@ def compile_and_save_stats(df_in, label, fastest_group, slowest_group):
 
     base = f"{label_slug}_min{vel_min_threshold}_x{vel_multiple}_{ts}"
     stats_dir = os.path.join(fig_dir, "stats")
-    f_med = os.path.join(stats_dir, f"{base}_medians.csv")
-    f_kw  = os.path.join(stats_dir, f"{base}_kruskal.csv")
-    f_pw  = os.path.join(stats_dir, f"{base}_pairwise_keypairs.csv")
-    f_bt  = os.path.join(stats_dir, f"{base}_bootstrap_delta_median.csv")
-    f_sp  = os.path.join(stats_dir, f"{base}_spearman_vs_vel_ratio.csv")
+    f_med = os.path.join(stats_dir, f"{base}_medians_{time_label}.csv")
+    f_kw  = os.path.join(stats_dir, f"{base}_kruskal_{time_label}.csv")
+    f_pw  = os.path.join(stats_dir, f"{base}_pairwise_keypairs_{time_label}.csv")
+    f_bt  = os.path.join(stats_dir, f"{base}_bootstrap_delta_median_{time_label}.csv")
+    f_sp  = os.path.join(stats_dir, f"{base}_spearman_vs_vel_ratio_{time_label}.csv")
 
     df_med.to_csv(f_med, index=False)
     df_kw.to_csv(f_kw, index=False)

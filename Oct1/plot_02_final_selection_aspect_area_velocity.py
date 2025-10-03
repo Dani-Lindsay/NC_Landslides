@@ -125,6 +125,9 @@ width = 2*np.pi / len(az_grid)
 ax.bar(az_grid, np.full_like(az_grid, r_max), width=width, bottom=0,
        color=bg_colors, edgecolor='none', zorder=0)
 
+
+
+
 # Grid and styling
 ax.grid(True, zorder=2)
 
@@ -161,7 +164,7 @@ cbar = fig.colorbar(sc, ax=ax, orientation='vertical', pad=0.1, shrink=0.55)
 cbar.set_label('LOS Velocity (cm/yr)')
 
 # Title above plot
-ax.set_title('Landslide Aspect vs. Area (log)', y=1.08)
+ax.set_title('Landslide Aspect vs. Area (log)', y=1.1)
 
 # Radial limits
 ax.set_ylim(r_min, r_max)

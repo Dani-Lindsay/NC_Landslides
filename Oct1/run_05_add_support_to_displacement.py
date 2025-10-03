@@ -263,7 +263,7 @@ def main():
     disp_files = []
     for root, _, files in os.walk(displacement_dir):
         for f in files:
-            if f.endswith(".h5") and "Timeseries_2" in f:
+            if f.endswith(".h5") and "Timeseries" in f:
                 disp_files.append(os.path.join(root, f))
     disp_files.sort()
 

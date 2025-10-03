@@ -41,9 +41,13 @@ SPAN_WY23_COLOR = "#e6e6e6"  # slightly darker gray
 BAND_ALPHA = 0.25
 
 # Data locations
-CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv"
-H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4"   # where *.h5 live
+#CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4/compiled_landslide_data.csv"
+#H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data_1/LS_Final_TS_4"   # where *.h5 live
 
+
+# Data locations
+CSV_PATH = "/Volumes/Seagate/NC_Landslides/Data_3/LS_Timeseries/final_selection_only_with_pga_precip.csv"
+H5_DIR   = "/Volumes/Seagate/NC_Landslides/Data_3/LS_Timeseries"   # where *.h5 live
 
 # =========================
 # Helpers
@@ -161,8 +165,8 @@ def plot_panel(ax, long, summary, title, n_series, n_failed, norm_method):
 df = pd.read_csv(CSV_PATH)
 
 # Absolute velocities in cm/yr
-df["vel_dry1"] = np.abs(df["meta__ts_dry1_vel_myr"] * 100)
-df["vel_dry2"] = np.abs(df["meta__ts_dry2_vel_myr"] * 100)
+df["vel_dry1"] = np.abs(df["ts_eq1_3month_vel_myr"] * 100)
+df["vel_dry2"] = np.abs(df["ts_eq2_3month_vel_myr"] * 100)
 
 # Filter for significant motion (>= threshold in either year)
 df = df[(df["vel_dry1"] >= vel_min_threshold) | (df["vel_dry2"] >= vel_min_threshold)].copy()

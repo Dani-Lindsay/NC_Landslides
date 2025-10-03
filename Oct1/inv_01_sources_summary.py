@@ -137,6 +137,10 @@ def main():
 
     # Print clean lines
     print("\n=== Detection by Source ===\n")
+    
+    print(f"Overall success: {int((df[SELECTED_COL].apply(to_bool)==True).sum())}/{len(df)} = {((df[SELECTED_COL].apply(to_bool)==True).sum()/max(len(df),1))*100:.1f}%")
+
+
     for _, r in out.iterrows():
         src = r["source"]
         tot = int(r["total_candidates"])
